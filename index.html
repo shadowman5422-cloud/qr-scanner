@@ -3,103 +3,38 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
-  <title>QR পণ্য স্ক্যানার (তারিখ ও ডিলিট সহ)</title>
+  <title>ডায়নামিক QR ও বারকোড স্ক্যানার</title>
   <script src="https://unpkg.com/html5-qrcode"></script>
   <style>
-    body {
-      font-family: 'Segoe UI', sans-serif;
-      padding: 15px;
-      max-width: 650px;
-      margin: auto;
-      background: #f5f5f5;
-    }
+    body { font-family: 'Segoe UI', sans-serif; padding: 15px; max-width: 650px; margin: auto; background: #f5f5f5; }
     h2 { color: #2c3e50; }
-    table {
-      border-collapse: collapse;
-      width: 100%;
-      background: white;
-      box-shadow: 0 0 5px rgba(0,0,0,0.1);
-      margin: 15px 0;
-      font-size: 14px;
-    }
-    th {
-      background: #3498db;
-      color: white;
-      padding: 10px 6px;
-      text-align: center;
-    }
-    td {
-      border: 1px solid #ddd;
-      padding: 8px 6px;
-      text-align: center;
-    }
-    .clickable {
-      color: #2980b9;
-      cursor: pointer;
-      text-decoration: underline;
-    }
-    .totals td {
-      font-weight: bold;
-      background: #ecf0f1;
-    }
-    button {
-      padding: 12px 18px;
-      margin: 4px;
-      border: none;
-      border-radius: 6px;
-      font-size: 15px;
-      cursor: pointer;
-    }
+    table { border-collapse: collapse; width: 100%; background: white; box-shadow: 0 0 5px rgba(0,0,0,0.1); margin: 15px 0; font-size: 14px; overflow-x: auto; display: block; }
+    th { background: #3498db; color: white; padding: 10px 6px; text-align: center; position: sticky; top: 0; }
+    td { border: 1px solid #ddd; padding: 8px 6px; text-align: center; }
+    .totals td { font-weight: bold; background: #ecf0f1; }
+    button { padding: 12px 18px; margin: 4px; border: none; border-radius: 6px; font-size: 15px; cursor: pointer; }
     #saveBtn { background: #27ae60; color: white; }
     #clearBtn { background: #e67e22; color: white; }
-    .delete-btn {
-      background: #e74c3c;
-      color: white;
-      padding: 5px 10px;
-      border-radius: 4px;
-      font-size: 14px;
-      border: none;
-    }
-    #reader {
-      width: 100%;
-      max-width: 350px;
-      margin: 0 auto 20px;
-    }
-    #message {
-      margin-top: 12px;
-      font-weight: bold;
-      text-align: center;
-    }
+    .delete-btn { background: #e74c3c; color: white; padding: 5px 10px; border-radius: 4px; font-size: 14px; border: none; }
+    #reader { width: 100%; max-width: 350px; margin: 0 auto 20px; }
+    #message { margin-top: 12px; font-weight: bold; text-align: center; }
     .success { color: green; }
     .error { color: red; }
   </style>
 </head>
 <body>
-  <h2>📷 QR পণ্য স্ক্যানার</h2>
-  <p>ক্যামেরায় QR কোড দেখালেই পণ্য তালিকায় যুক্ত হবে।</p>
+  <h2>📷 ডায়নামিক QR & বারকোড স্ক্যানার</h2>
+  <p>স্ক্যান করা তথ্য অনুযায়ী কলাম ও সারি নিজেই তৈরি হবে (ডেটা ফরম্যাট: key=value|key=value)।</p>
   <div id="reader"></div>
   <button id="stopScanBtn" style="display:none;">🛑 স্ক্যান থামান</button>
 
-  <table id="productTable">
-    <thead>
-      <tr>
-        <th>তারিখ</th>
-        <th>পণ্যের নাম</th>
-        <th>পিস/ওজন</th>
-        <th>দাম</th>
-        <th>মুছুন</th>
-      </tr>
-    </thead>
-    <tbody></tbody>
-    <tfoot>
-      <tr class="totals">
-        <td colspan="2" id="totalItems">মোট পণ্য: 0</td>
-        <td></td>
-        <td id="totalPrice">মোট দাম: 0</td>
-        <td></td>
-      </tr>
-    </tfoot>
-  </table>
+  <div style="overflow-x:auto;">
+    <table id="productTable">
+      <thead id="tableHead"></thead>
+      <tbody id="tableBody"></tbody>
+      <tfoot id="tableFoot"></tfoot>
+    </table>
+  </div>
 
   <div style="text-align:center;">
     <button id="saveBtn">💾 Google Sheet-এ সংরক্ষণ</button>
@@ -109,208 +44,177 @@
 
   <script>
     // ⚙️ আপনার Google Apps Script ওয়েব অ্যাপ URL বসান
-    const SCRIPT_URL = 'https://script.google.com/macros/s/XXXXX/exec'; // <-- এখানে URL দিন
+    const SCRIPT_URL = 'https://script.google.com/macros/s/XXXXX/exec'; 
 
-    // পণ্যের তালিকা [{date, name, qty, price, details}, ...]
-    let productList = [];
-
-    // DOM
-    const tbody = document.querySelector('#productTable tbody');
-    const totalItemsSpan = document.getElementById('totalItems');
-    const totalPriceSpan = document.getElementById('totalPrice');
+    let productList = []; 
+    
+    const tableHead = document.getElementById('tableHead');
+    const tableBody = document.getElementById('tableBody');
+    const tableFoot = document.getElementById('tableFoot');
     const saveBtn = document.getElementById('saveBtn');
     const clearBtn = document.getElementById('clearBtn');
     const messageDiv = document.getElementById('message');
     const stopScanBtn = document.getElementById('stopScanBtn');
 
-    // লোকাল স্টোরেজ থেকে ডেটা লোড
     try {
       const saved = localStorage.getItem('productList');
       if (saved) productList = JSON.parse(saved);
       renderTable();
     } catch(e) {}
 
-    // টেবিল আঁকা
+    // ✅ টেবিল রেন্ডার (ডায়নামিক কলাম তৈরি)
     function renderTable() {
-      tbody.innerHTML = '';
-      let totalItems = 0;
+      // স্ক্যান করা সব ডেটা থেকে ইউনিক কলাম বের করা
+      const allKeys = new Set();
+      productList.forEach(item => {
+        Object.keys(item).forEach(key => allKeys.add(key));
+      });
+      
+      // ডিফল্ট হেডার ('date' ও 'delete' সবসময় থাকবে)
+      const defaultHeaders = ['date'];
+      const finalHeaders = Array.from(allKeys).filter(k => !defaultHeaders.includes(k));
+      
+      // হেডার সাজানো
+      const headers = [...defaultHeaders, ...finalHeaders, 'delete'];
+
+      // হেডার তৈরি
+      tableHead.innerHTML = '';
+      const headerRow = document.createElement('tr');
+      headers.forEach(header => {
+        const th = document.createElement('th');
+        if(header === 'date') th.textContent = 'তারিখ';
+        else if(header === 'delete') th.textContent = 'মুছুন';
+        else th.textContent = header;
+        headerRow.appendChild(th);
+      });
+      tableHead.appendChild(headerRow);
+
+      // বডি তৈরি
+      tableBody.innerHTML = '';
       let totalPrice = 0;
 
       productList.forEach((item, index) => {
         const tr = document.createElement('tr');
-
-        // তারিখ
-        const dateTd = document.createElement('td');
-        dateTd.textContent = item.date;
-        tr.appendChild(dateTd);
-
-        // নাম (ক্লিক করলে বিস্তারিত)
-        const nameTd = document.createElement('td');
-        const nameSpan = document.createElement('span');
-        nameSpan.className = 'clickable';
-        nameSpan.textContent = item.name;
-        nameSpan.addEventListener('click', () => {
-          alert(`তারিখ: ${item.date}\nপণ্য: ${item.name}\nপরিমাণ: ${item.qty}\nদাম: ${item.price} টাকা\n\nবিস্তারিত:\n${item.details || 'কোনো তথ্য নেই'}`);
-        });
-        nameTd.appendChild(nameSpan);
-        tr.appendChild(nameTd);
-
-        // পরিমাণ
-        const qtyTd = document.createElement('td');
-        qtyTd.textContent = item.qty;
-        tr.appendChild(qtyTd);
-
-        // দাম
-        const priceTd = document.createElement('td');
-        priceTd.textContent = item.price;
-        tr.appendChild(priceTd);
-
-        // মুছুন বাটন
-        const deleteTd = document.createElement('td');
-        const delBtn = document.createElement('button');
-        delBtn.className = 'delete-btn';
-        delBtn.textContent = '✕';
-        delBtn.title = 'এই পণ্যটি মুছুন';
-        delBtn.addEventListener('click', () => {
-          if (confirm(`"${item.name}" মুছে ফেলবেন?`)) {
-            productList.splice(index, 1);
-            saveToLocal();
-            renderTable();
-            messageDiv.textContent = '';
+        headers.forEach(header => {
+          const td = document.createElement('td');
+          if (header === 'delete') {
+            const delBtn = document.createElement('button');
+            delBtn.className = 'delete-btn';
+            delBtn.textContent = '✕';
+            delBtn.onclick = () => {
+              if (confirm('আইটেমটি মুছে ফেলবেন?')) {
+                productList.splice(index, 1);
+                renderTable();
+              }
+            };
+            td.appendChild(delBtn);
+          } else {
+            let val = item[header] || '';
+            if (typeof val === 'number' || header.toLowerCase() === 'price' || header.toLowerCase() === 'দাম') {
+              let priceNum = parseFloat(val) || 0;
+              totalPrice += priceNum;
+              val = priceNum > 0 ? priceNum + ' টাকা' : val;
+            }
+            td.textContent = val;
           }
+          tr.appendChild(td);
         });
-        deleteTd.appendChild(delBtn);
-        tr.appendChild(deleteTd);
-
-        tbody.appendChild(tr);
-        totalItems++;
-        totalPrice += item.price;
+        tableBody.appendChild(tr);
       });
 
-      totalItemsSpan.textContent = `মোট পণ্য: ${totalItems}`;
-      totalPriceSpan.textContent = `মোট দাম: ${totalPrice} টাকা`;
-      saveToLocal();
-    }
-
-    // লোকাল স্টোরেজে সংরক্ষণ
-    function saveToLocal() {
+      // ফুটার (মোট)
+      tableFoot.innerHTML = '';
+      const footerRow = document.createElement('tr');
+      footerRow.className = 'totals';
+      for(let i=0; i<headers.length-2; i++) {
+        const td = document.createElement('td');
+        td.textContent = '';
+        footerRow.appendChild(td);
+      }
+      const totalTd = document.createElement('td');
+      totalTd.textContent = `মোট পণ্য: ${productList.length}`;
+      footerRow.appendChild(totalTd);
+      const priceTd = document.createElement('td');
+      priceTd.textContent = `মোট দাম: ${totalPrice} টাকা`;
+      footerRow.appendChild(priceTd);
+      tableFoot.appendChild(footerRow);
+      
       localStorage.setItem('productList', JSON.stringify(productList));
     }
 
-    // QR স্ক্যান ডেটা প্রসেস
+    // ✅ স্ক্যান করার মূল লজিক (যেকোনো ফরম্যাট ধরবে)
     function processQRData(qrString) {
-      // QR ফরম্যাট: পণ্যের নাম|পরিমাণ|দাম|বিস্তারিত (বিস্তারিত ঐচ্ছিক)
+      const today = new Date().toLocaleDateString('bn-BD', { year: 'numeric', month: '2-digit', day: '2-digit' });
+      
+      const item = { date: today };
       const parts = qrString.split('|');
-      if (parts.length < 3) {
-        alert('QR কোড ফরম্যাট ঠিক নয়। ফরম্যাট: Name|Qty|Price|Details');
-        return;
-      }
-      const name = parts[0].trim();
-      const qty = parts[1].trim();
-      const price = parseFloat(parts[2].trim());
-      if (isNaN(price)) {
-        alert('দাম সঠিক সংখ্যা নয়: ' + parts[2]);
-        return;
-      }
-      const details = parts[3] ? parts[3].trim() : '';
-
-      // আজকের তারিখ (বাংলাদেশী ফরম্যাটে)
-      const today = new Date().toLocaleDateString('bn-BD', {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit'
+      
+      let foundKeys = false;
+      parts.forEach(part => {
+        if (part.includes('=')) { // যদি = থাকে তবে ডায়নামিক কলাম তৈরি করবে
+          const kv = part.split('=');
+          if (kv.length === 2) {
+            item[kv[0].trim()] = kv[1].trim();
+            foundKeys = true;
+          }
+        }
       });
 
-      // তালিকায় যোগ
-      productList.push({
-        date: today,
-        name: name,
-        qty: qty,
-        price: price,
-        details: details
-      });
+      // যদি কোনো '=' (কী-ভ্যালু) না পায়, তবে সাধারণ বারকোড নম্বর ধরে নিবে
+      if (!foundKeys) {
+        item['পণ্যের নাম'] = qrString.trim();
+        item['পরিমাণ'] = '১ টি';
+        item['দাম'] = '0';
+      }
 
+      productList.push(item);
       renderTable();
-      messageDiv.textContent = `✅ ${name} যোগ হয়েছে`;
+      messageDiv.textContent = `✅ স্ক্যান সফল`;
       messageDiv.className = 'success';
-
-      // ভাইব্রেশন (মোবাইলের জন্য)
       if (navigator.vibrate) navigator.vibrate(200);
     }
 
-    // QR স্ক্যানার চালু
+    // ক্যামেরা ও বারকোড কনফিগার
     const html5QrCode = new Html5Qrcode("reader");
-    const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+    const formatsToSupport = [
+      Html5QrcodeSupportedFormats.QR_CODE, Html5QrcodeSupportedFormats.EAN_13,
+      Html5QrcodeSupportedFormats.EAN_8, Html5QrcodeSupportedFormats.UPC_A,
+      Html5QrcodeSupportedFormats.CODE_128
+    ];
+    const config = { fps: 10, qrbox: { width: 250, height: 250 }, formatsToSupport };
 
-    function startScanner() {
-      html5QrCode.start(
-        { facingMode: "environment" }, // পেছনের ক্যামেরা
-        config,
-        (decodedText) => {
-          processQRData(decodedText);
-        },
-        (errorMessage) => {
-          // স্ক্যানিং এরর ইগনোর
-        }
-      ).then(() => {
-        stopScanBtn.style.display = 'inline-block';
-      }).catch(err => {
-        alert('ক্যামেরা শুরু করা যায়নি। ব্রাউজার সেটিং থেকে ক্যামেরা অনুমতি দিন।');
-      });
-    }
+    html5QrCode.start({ facingMode: "environment" }, config, 
+      decodedText => processQRData(decodedText),
+      err => {}
+    ).then(() => stopScanBtn.style.display = 'inline-block')
+     .catch(err => alert('ক্যামেরা অনুমতি দিন'));
 
-    stopScanBtn.addEventListener('click', () => {
-      html5QrCode.stop().then(() => {
-        stopScanBtn.style.display = 'none';
-      }).catch(err => console.log(err));
-    });
+    stopScanBtn.onclick = () => {
+      html5QrCode.stop().then(() => stopScanBtn.style.display = 'none');
+    };
 
-    window.addEventListener('load', startScanner);
+    window.addEventListener('load', ()=>{}); // স্ক্যানার ইতিমধ্যে চালু আছে
 
-    // Google Sheet-এ ডেটা পাঠানো
+    // Google Sheet-এ সেভ
     saveBtn.addEventListener('click', () => {
-      if (productList.length === 0) {
-        messageDiv.textContent = 'সংরক্ষণের জন্য কোনো পণ্য নেই।';
-        messageDiv.className = 'error';
-        return;
-      }
-
-      // Sheet-এর কলাম অনুযায়ী ডেটা: Date, Name, Qty, Price, Details
-      const payload = productList.map(p => ({
-        date: p.date,
-        name: p.name,
-        qty: p.qty,
-        price: p.price,
-        details: p.details
-      }));
-
+      if (productList.length === 0) return alert('তালিকা খালি');
       fetch(SCRIPT_URL, {
-        method: 'POST',
-        body: JSON.stringify(payload),
+        method: 'POST', body: JSON.stringify(productList),
         headers: { 'Content-Type': 'application/json' }
-      })
-      .then(response => response.text())
-      .then(data => {
-        messageDiv.textContent = '✅ Google Sheet-এ সফলভাবে জমা হয়েছে।';
-        messageDiv.className = 'success';
-        // জমা শেষে তালিকা খালি (ঐচ্ছিক)
-        productList = [];
-        renderTable();
-      })
-      .catch(err => {
-        messageDiv.textContent = '❌ নেটওয়ার্ক সমস্যা। আবার চেষ্টা করুন।';
-        messageDiv.className = 'error';
+      }).then(() => {
+        messageDiv.textContent = '✅ Google Sheet-এ জমা হয়েছে';
+        productList = []; renderTable();
+      }).catch(() => {
+        messageDiv.textContent = '❌ নেটওয়ার্ক সমস্যা';
       });
     });
 
-    // সম্পূর্ণ তালিকা মুছা
-    clearBtn.addEventListener('click', () => {
-      if (productList.length > 0 && confirm('সম্পূর্ণ তালিকা মুছে ফেলবেন?')) {
-        productList = [];
-        renderTable();
+    clearBtn.onclick = () => {
+      if (confirm('সম্পূর্ণ তালিকা মুছবেন?')) {
+        productList = []; renderTable();
         messageDiv.textContent = '';
       }
-    });
+    };
   </script>
 </body>
 </html>
