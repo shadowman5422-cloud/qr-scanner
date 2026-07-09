@@ -15,6 +15,7 @@
     button { padding: 12px 18px; margin: 4px; border: none; border-radius: 6px; font-size: 15px; cursor: pointer; }
     #saveBtn { background: #27ae60; color: white; }
     #clearBtn { background: #e67e22; color: white; }
+    #soundToggleBtn { background: #3498db; color: white; } /* নতুন বাটন */
     .delete-btn { background: #e74c3c; color: white; padding: 5px 10px; border-radius: 4px; font-size: 14px; border: none; }
     #reader { width: 100%; max-width: 350px; margin: 0 auto 20px; }
     #message { margin-top: 12px; font-weight: bold; text-align: center; }
@@ -24,9 +25,12 @@
 </head>
 <body>
   <h2>📷 ডায়নামিক QR & বারকোড স্ক্যানার</h2>
-  <p>স্ক্যান করা তথ্য অনুযায়ী কলাম ও সারি নিজেই তৈরি হবে (ডেটা ফরম্যাট: key=value|key=value)।</p>
+  <p>স্ক্যান করা তথ্য অনুযায়ী কলাম ও সারি নিজেই তৈরি হবে।</p>
   <div id="reader"></div>
-  <button id="stopScanBtn" style="display:none;">🛑 স্ক্যান থামান</button>
+  <div style="text-align:center; margin-top:10px;">
+    <button id="stopScanBtn" style="display:none;">🛑 স্ক্যান থামান</button>
+    <button id="soundToggleBtn">🔊 স্ক্যান শব্দ: চালু</button>
+  </div>
 
   <div style="overflow-x:auto;">
     <table id="productTable">
@@ -47,14 +51,43 @@
     const SCRIPT_URL = 'https://script.google.com/macros/s/XXXXX/exec'; 
 
     let productList = []; 
-    
+    let lastScannedText = ''; // ডুপ্লিকেট স্ক্যান আটকানোর ভেরিয়েবল
+    let isProcessing = false; // ব্লক করা হচ্ছে কিনা
+    let isSoundOn = true; // শব্দ চালু আছে কিনা
+
     const tableHead = document.getElementById('tableHead');
     const tableBody = document.getElementById('tableBody');
     const tableFoot = document.getElementById('tableFoot');
     const saveBtn = document.getElementById('saveBtn');
     const clearBtn = document.getElementById('clearBtn');
+    const soundToggleBtn = document.getElementById('soundToggleBtn');
     const messageDiv = document.getElementById('message');
     const stopScanBtn = document.getElementById('stopScanBtn');
+
+    // 🔥 শব্দ চালু/বন্ধ করার বাটন ইভেন্ট
+    soundToggleBtn.addEventListener('click', () => {
+      isSoundOn = !isSoundOn;
+      soundToggleBtn.textContent = isSoundOn ? '🔊 স্ক্যান শব্দ: চালু' : '🔇 স্ক্যান শব্দ: বন্ধ';
+      soundToggleBtn.style.background = isSoundOn ? '#3498db' : '#7f8c8d';
+    });
+
+    // 🔥 বিপ শব্দ তৈরি ফাংশন
+    function playBeep() {
+      if (!isSoundOn) return;
+      try {
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const oscillator = audioCtx.createOscillator();
+        const gainNode = audioCtx.createGain();
+        oscillator.type = 'sine';
+        oscillator.frequency.setValueAtTime(800, audioCtx.currentTime);
+        gainNode.gain.setValueAtTime(0.5, audioCtx.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+        oscillator.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+        oscillator.start();
+        oscillator.stop(audioCtx.currentTime + 0.1);
+      } catch(e) { /* শব্দ তৈরি না হলে ইগনোর */ }
+    }
 
     try {
       const saved = localStorage.getItem('productList');
@@ -62,22 +95,18 @@
       renderTable();
     } catch(e) {}
 
-    // ✅ টেবিল রেন্ডার (ডায়নামিক কলাম তৈরি)
+    // ✅ টেবিল রেন্ডার (ফুটার সারিবদ্ধ করা)
     function renderTable() {
-      // স্ক্যান করা সব ডেটা থেকে ইউনিক কলাম বের করা
       const allKeys = new Set();
       productList.forEach(item => {
         Object.keys(item).forEach(key => allKeys.add(key));
       });
       
-      // ডিফল্ট হেডার ('date' ও 'delete' সবসময় থাকবে)
       const defaultHeaders = ['date'];
       const finalHeaders = Array.from(allKeys).filter(k => !defaultHeaders.includes(k));
-      
-      // হেডার সাজানো
       const headers = [...defaultHeaders, ...finalHeaders, 'delete'];
 
-      // হেডার তৈরি
+      // হেডার
       tableHead.innerHTML = '';
       const headerRow = document.createElement('tr');
       headers.forEach(header => {
@@ -89,8 +118,9 @@
       });
       tableHead.appendChild(headerRow);
 
-      // বডি তৈরি
+      // বডি
       tableBody.innerHTML = '';
+      let totalItems = 0;
       let totalPrice = 0;
 
       productList.forEach((item, index) => {
@@ -110,48 +140,57 @@
             td.appendChild(delBtn);
           } else {
             let val = item[header] || '';
-            if (typeof val === 'number' || header.toLowerCase() === 'price' || header.toLowerCase() === 'দাম') {
+            if (header === 'দাম' || header === 'price') {
               let priceNum = parseFloat(val) || 0;
               totalPrice += priceNum;
-              val = priceNum > 0 ? priceNum + ' টাকা' : val;
+              val = priceNum > 0 ? priceNum + ' টাকা' : '0';
             }
             td.textContent = val;
+            if(header === 'পণ্যের নাম') totalItems++;
           }
           tr.appendChild(td);
         });
         tableBody.appendChild(tr);
       });
 
-      // ফুটার (মোট)
+      // 🔥 ফুটার (পরিমাণ ও দাম কলামের নিচে মোট বসানো)
       tableFoot.innerHTML = '';
       const footerRow = document.createElement('tr');
       footerRow.className = 'totals';
-      for(let i=0; i<headers.length-2; i++) {
-        const td = document.createElement('td');
-        td.textContent = '';
-        footerRow.appendChild(td);
-      }
-      const totalTd = document.createElement('td');
-      totalTd.textContent = `মোট পণ্য: ${productList.length}`;
-      footerRow.appendChild(totalTd);
-      const priceTd = document.createElement('td');
-      priceTd.textContent = `মোট দাম: ${totalPrice} টাকা`;
-      footerRow.appendChild(priceTd);
+      footerRow.innerHTML = `
+        <td colspan="2" style="text-align:right; font-weight:bold;">মোট পণ্য:</td>
+        <td style="font-weight:bold;">${totalItems}</td>
+        <td style="font-weight:bold;">${totalPrice} টাকা</td>
+        <td></td>
+      `;
       tableFoot.appendChild(footerRow);
       
       localStorage.setItem('productList', JSON.stringify(productList));
     }
 
-    // ✅ স্ক্যান করার মূল লজিক (যেকোনো ফরম্যাট ধরবে)
+    // ✅ উন্নত স্ক্যান লজিক (একবার স্ক্যান + অটোমেটিক দাম বের করা)
     function processQRData(qrString) {
+      const trimmedString = qrString.trim();
+
+      // 🔥 ডুপ্লিকেট স্ক্যান আটকানো (একই QR ক্যামেরায় ধরে রাখলে আর স্ক্যান করবে না)
+      if (lastScannedText === trimmedString || isProcessing) {
+        return; 
+      }
+      isProcessing = true;
+      lastScannedText = trimmedString;
+
+      // শব্দ বাজানো
+      playBeep();
+
       const today = new Date().toLocaleDateString('bn-BD', { year: 'numeric', month: '2-digit', day: '2-digit' });
-      
       const item = { date: today };
-      const parts = qrString.split('|');
       
+      // ১. ডেটা পার্স করা
+      const parts = trimmedString.split('|');
       let foundKeys = false;
+      
       parts.forEach(part => {
-        if (part.includes('=')) { // যদি = থাকে তবে ডায়নামিক কলাম তৈরি করবে
+        if (part.includes('=')) {
           const kv = part.split('=');
           if (kv.length === 2) {
             item[kv[0].trim()] = kv[1].trim();
@@ -160,18 +199,33 @@
         }
       });
 
-      // যদি কোনো '=' (কী-ভ্যালু) না পায়, তবে সাধারণ বারকোড নম্বর ধরে নিবে
+      // ২. যদি সাধারণ টেক্সট হয়, তবে দাম বের করার লজিক
       if (!foundKeys) {
-        item['পণ্যের নাম'] = qrString.trim();
+        let namePart = trimmedString;
+        let detectedPrice = 0;
+        
+        // টেক্সটের ভেতরে "দাম" বা "Price" খোঁজা (যেমন: বাংলা বই দাম ১৫০ টাকা)
+        const priceMatch = namePart.match(/(?:দাম|price)\s*(\d+)/i);
+        if (priceMatch && priceMatch[1]) {
+          detectedPrice = parseFloat(priceMatch[1]);
+          namePart = namePart.replace(/(?:দাম|price)\s*\d+\s*(?:টাকা)?/i, '').trim();
+        }
+        
+        item['পণ্যের নাম'] = namePart;
         item['পরিমাণ'] = '১ টি';
-        item['দাম'] = '0';
+        item['দাম'] = detectedPrice;
       }
 
       productList.push(item);
       renderTable();
-      messageDiv.textContent = `✅ স্ক্যান সফল`;
+      messageDiv.textContent = `✅ ${item['পণ্যের নাম'] || item.name || 'পণ্য'} স্ক্যান সফল`;
       messageDiv.className = 'success';
       if (navigator.vibrate) navigator.vibrate(200);
+
+      // 🔥 ১.৫ সেকেন্ড পর লক খোলা (যাতে ভিন্ন পণ্য দ্রুত স্ক্যান করা যায়)
+      setTimeout(() => {
+        isProcessing = false;
+      }, 1500);
     }
 
     // ক্যামেরা ও বারকোড কনফিগার
@@ -192,8 +246,6 @@
     stopScanBtn.onclick = () => {
       html5QrCode.stop().then(() => stopScanBtn.style.display = 'none');
     };
-
-    window.addEventListener('load', ()=>{}); // স্ক্যানার ইতিমধ্যে চালু আছে
 
     // Google Sheet-এ সেভ
     saveBtn.addEventListener('click', () => {
