@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
-  <title>ডায়নামিক QR ও বারকোড স্ক্যানার</title>
+  <title>ডায়নামিক QR ও বারকোড স্ক্যানার (আপডেটেড)</title>
   <script src="https://unpkg.com/html5-qrcode"></script>
   <style>
     body { font-family: 'Segoe UI', sans-serif; padding: 15px; max-width: 650px; margin: auto; background: #f5f5f5; }
@@ -16,6 +16,8 @@
     #saveBtn { background: #27ae60; color: white; }
     #clearBtn { background: #e67e22; color: white; }
     #soundToggleBtn { background: #3498db; color: white; }
+    /* ✅ স্ক্যান থামান বোতাম কালো করা হয়েছে */
+    #stopScanBtn { background: #000000; color: white; border: 1px solid #555; }
     .delete-btn { background: #e74c3c; color: white; padding: 5px 10px; border-radius: 4px; font-size: 14px; border: none; }
     #reader { width: 100%; max-width: 350px; margin: 0 auto 20px; }
     #message { margin-top: 12px; font-weight: bold; text-align: center; }
@@ -53,6 +55,8 @@
     let productList = []; 
     let lastScannedText = ''; 
     let isSoundOn = true;
+    // ✅ বারবার স্ক্যান আটকানোর জন্য লক
+    let isProcessing = false;
 
     const tableHead = document.getElementById('tableHead');
     const tableBody = document.getElementById('tableBody');
@@ -162,12 +166,19 @@
       localStorage.setItem('productList', JSON.stringify(productList));
     }
 
+    // ✅ স্ক্যান লজিক (একাধিক ভিন্ন QR ও বারকোড নেওয়ার জন্য ফিক্স)
     function processQRData(qrString) {
+      // যদি প্রসেসিং চলমান থাকে, তবে নতুন ইনপুট নিবে না (লক)
+      if (isProcessing) return; 
+      
+      isProcessing = true; // লক চালু
       const trimmedString = qrString.trim();
 
       // একই পণ্য স্ক্যান করলে কনফার্ম বক্স
       if (lastScannedText === trimmedString) {
         if (!confirm('⚠️ এই পণ্যটি ইতিমধ্যে স্ক্যান করা হয়েছে। কি আরেকটি নতুন কপি হিসেবে যুক্ত করতে চান?')) {
+          // যদি 'না' দেয়, ৪০০ মিলিসেকেন্ড পর লক খুলে আবার নতুন স্ক্যান নিবে
+          setTimeout(() => { isProcessing = false; }, 400);
           return; 
         }
       }
@@ -191,7 +202,6 @@
         }
       });
 
-      // টেক্সট থেকে দাম শনাক্তকরণ
       if (!foundKeys) {
         let namePart = trimmedString;
         let detectedPrice = 0;
@@ -201,7 +211,6 @@
           detectedPrice = parseFloat(priceMatch[1]);
           namePart = namePart.replace(/(?:দাম|price|টাকা|৳|Rs\.?)\s*\d+\s*(?:টাকা)?/i, '').trim();
         }
-        
         if (!namePart) namePart = trimmedString;
 
         item['পণ্যের নাম'] = namePart || 'অজানা পণ্য';
@@ -214,17 +223,29 @@
       messageDiv.textContent = `✅ ${item['পণ্যের নাম'] || item.name || 'পণ্য'} স্ক্যান সফল`;
       messageDiv.className = 'success';
       if (navigator.vibrate) navigator.vibrate(200);
+
+      // ✅ দ্রুত একের পর এক স্ক্যানের জন্য ৫০০ মিলিসেকেন্ড পর লক খোলা
+      setTimeout(() => {
+        isProcessing = false; 
+      }, 500);
     }
 
     const html5QrCode = new Html5Qrcode("reader");
+    // ✅ সকল প্রকার বারকোড এখানে যুক্ত করা হয়েছে (QR + সমস্ত 1D বারকোড)
     const formatsToSupport = [
-      Html5QrcodeSupportedFormats.QR_CODE, Html5QrcodeSupportedFormats.EAN_13,
-      Html5QrcodeSupportedFormats.EAN_8, Html5QrcodeSupportedFormats.UPC_A,
-      Html5QrcodeSupportedFormats.CODE_128
+      Html5QrcodeSupportedFormats.QR_CODE,
+      Html5QrcodeSupportedFormats.EAN_13,
+      Html5QrcodeSupportedFormats.EAN_8,
+      Html5QrcodeSupportedFormats.UPC_A,
+      Html5QrcodeSupportedFormats.UPC_E,       // যুক্ত করা হয়েছে
+      Html5QrcodeSupportedFormats.CODE_128,
+      Html5QrcodeSupportedFormats.CODE_39,     // যুক্ত করা হয়েছে
+      Html5QrcodeSupportedFormats.CODABAR,     // যুক্ত করা হয়েছে
+      Html5QrcodeSupportedFormats.CODE_93,     // যুক্ত করা হয়েছে
+      Html5QrcodeSupportedFormats.ITF          // যুক্ত করা হয়েছে
     ];
     const config = { fps: 10, qrbox: { width: 250, height: 250 }, formatsToSupport };
 
-    // ✅ এই ফাংশনটি স্ক্যানার চালু করবে (আগের কোডে এটি মিসিং ছিল)
     function startScanner() {
       html5QrCode.start({ facingMode: "environment" }, config, 
         decodedText => processQRData(decodedText),
@@ -233,7 +254,6 @@
        .catch(err => alert('ক্যামেরা অনুমতি দিন'));
     }
 
-    // ✅ পেজ লোড হলে স্ক্যানার চালু করার ইভেন্ট
     window.addEventListener('load', startScanner);
 
     stopScanBtn.onclick = () => {
