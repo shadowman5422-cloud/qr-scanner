@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
-  <title>অপটিমাইজড QR & বারকোড স্ক্যানার</title>
+  <title>স্মার্ট QR ও বারকোড স্ক্যানার (JSON সমর্থন)</title>
   <script src="https://unpkg.com/html5-qrcode"></script>
   <style>
     body { font-family: 'Segoe UI', sans-serif; padding: 15px; max-width: 650px; margin: auto; background: #f5f5f5; }
@@ -25,8 +25,8 @@
   </style>
 </head>
 <body>
-  <h2>📷 অপটিমাইজড QR & বারকোড স্ক্যানার</h2>
-  <p>স্ক্যান করা তথ্য অনুযায়ী কলাম ও সারি নিজেই তৈরি হবে (Code 128 সমর্থিত)।</p>
+  <h2>📷 স্মার্ট QR & বারকোড স্ক্যানার</h2>
+  <p>সকল ফরম্যাট (JSON, key=value, সাধারণ টেক্সট) সমর্থন করে।</p>
   <div id="reader"></div>
   <div style="text-align:center; margin-top:10px;">
     <button id="stopScanBtn" style="display:none;">🛑 স্ক্যান থামান</button>
@@ -135,11 +135,11 @@
             td.appendChild(delBtn);
           } else {
             let val = item[header] || '';
-            if (header === 'দাম' || header.toLowerCase() === 'price') {
+            if (header === 'দাম' || header === 'price' || header === 'Price') {
               let priceNum = parseFloat(val) || 0;
               totalPrice += priceNum;
               val = priceNum > 0 ? priceNum + ' টাকা' : '0';
-            } else if (header === 'পণ্যের নাম') {
+            } else if (header === 'পণ্যের নাম' || header === 'name') {
               totalItems++;
             }
             td.textContent = val;
@@ -162,6 +162,7 @@
       localStorage.setItem('productList', JSON.stringify(productList));
     }
 
+    // ✅ স্মার্ট পার্সিং ফাংশন (JSON + Key=Value + সাধারণ টেক্সট)
     function processQRData(qrString) {
       if (isProcessing) return;
 
@@ -180,6 +181,27 @@
       const today = new Date().toLocaleDateString('bn-BD', { year: 'numeric', month: '2-digit', day: '2-digit' });
       const item = { date: today };
       
+      // ১. JSON ফরম্যাট চেক করা (যেমন: {"name":"Shapner","price":10})
+      try {
+        const jsonData = JSON.parse(trimmedString);
+        // JSON থেকে ডেটা বের করে আইটেমে বসানো
+        for (const [key, value] of Object.entries(jsonData)) {
+           item[key] = value;
+        }
+        renderTable();
+        messageDiv.textContent = `✅ ${item.name || item['পণ্যের নাম'] || 'পণ্য'} স্ক্যান সফল`;
+        messageDiv.className = 'success';
+        if (navigator.vibrate) navigator.vibrate(200);
+        
+        productList.push(item);
+        renderTable(); // রেন্ডার করার সময় 'name' পণ্যের নাম হবে এবং 'price' দাম হবে
+        setTimeout(() => { isProcessing = false; }, 500);
+        return; // JSON সফল হলে ফাংশন থেকে বের হয়ে যাও
+      } catch (e) {
+        // JSON না হলে নিচের লজিক চলবে
+      }
+
+      // ২. Key=Value|Key=Value ফরম্যাট চেক করা
       const parts = trimmedString.split('|');
       let foundKeys = false;
       
@@ -193,6 +215,7 @@
         }
       });
 
+      // ৩. সাধারণ টেক্সট/বারকোড ফরম্যাট
       if (!foundKeys) {
         let namePart = trimmedString;
         let detectedPrice = 0;
@@ -228,8 +251,6 @@
       Html5QrcodeSupportedFormats.CODABAR, Html5QrcodeSupportedFormats.CODE_93,
       Html5QrcodeSupportedFormats.ITF
     ];
-
-    // 🔥 Code 128 এর জন্য বড় বক্স এবং ধীর গতি (আরও সেন্সিটিভ)
     const config = { fps: 5, qrbox: { width: 300, height: 100 }, formatsToSupport };
 
     function startScanner() {
