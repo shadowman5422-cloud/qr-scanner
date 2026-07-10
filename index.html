@@ -52,7 +52,6 @@
 
     let productList = []; 
     let lastScannedText = ''; 
-    let isProcessing = false; 
     let isSoundOn = true;
 
     const tableHead = document.getElementById('tableHead');
@@ -154,7 +153,7 @@
         tableBody.appendChild(tr);
       });
 
-      // 🔥 ফুটার (পরিমাণ ও দাম কলামের নিচে মোট বসানো)
+      // ফুটার (মোট পণ্য ও মোট দাম)
       tableFoot.innerHTML = '';
       const footerRow = document.createElement('tr');
       footerRow.className = 'totals';
@@ -169,16 +168,19 @@
       localStorage.setItem('productList', JSON.stringify(productList));
     }
 
-    // ✅ স্মার্ট পার্সিং লজিক (ফিক্স করা হয়েছে)
+    // ✅ দ্রুত স্ক্যানিং ও ডুপ্লিকেট কনফার্মেশন লজিক
     function processQRData(qrString) {
       const trimmedString = qrString.trim();
 
-      if (lastScannedText === trimmedString || isProcessing) {
-        return; 
+      // 🔥 একই পণ্য স্ক্যান করলে কনফার্ম বক্স (হ্যাঁ/না) আসবে
+      if (lastScannedText === trimmedString) {
+        if (!confirm('⚠️ এই পণ্যটি ইতিমধ্যে স্ক্যান করা হয়েছে। কি আরেকটি নতুন কপি হিসেবে যুক্ত করতে চান?')) {
+          return; // যদি 'না' দেন তাহলে কিছু হবে না
+        }
       }
-      isProcessing = true;
-      lastScannedText = trimmedString;
 
+      // 🔥 দ্রুত স্ক্যানিং: এখন কোনো টাইম লক (setTimeout) নেই
+      lastScannedText = trimmedString;
       playBeep();
 
       const today = new Date().toLocaleDateString('bn-BD', { year: 'numeric', month: '2-digit', day: '2-digit' });
@@ -197,22 +199,25 @@
         }
       });
 
-      // 🔥 টেক্সট থেকে দাম শনাক্ত করা ও নাম থেকে দাম সরিয়ে ফেলা (বাগ ফিক্স)
+      // 🔥 টেক্সট থেকে দাম শনাক্ত করার উন্নত লজিক
       if (!foundKeys) {
         let namePart = trimmedString;
         let detectedPrice = 0;
         
-        // টেক্সটের ভেতরে "দাম" বা "Price" খোঁজা
-        const priceMatch = namePart.match(/(?:দাম|price)\s*(\d+)/i);
+        // টেক্সটের ভেতরে "দাম", "price", "টাকা", "৳" খোঁজা (শুধুমাত্র ফরম্যাট থাকলে)
+        const priceMatch = namePart.match(/(?:দাম|price|টাকা|৳|Rs\.?)\s*(\d+)/i);
         if (priceMatch && priceMatch[1]) {
           detectedPrice = parseFloat(priceMatch[1]);
-          // রিপ্লেস করার সময় পুরো অংশটি সঠিকভাবে সরানো হচ্ছে
-          namePart = namePart.replace(/(?:দাম|price)\s*\d+\s*(?:টাকা)?/i, '').trim();
+          // টেক্সট থেকে দামের অংশ বাদ দেওয়া
+          namePart = namePart.replace(/(?:দাম|price|টাকা|৳|Rs\.?)\s*\d+\s*(?:টাকা)?/i, '').trim();
         }
         
+        // যদি ফাঁকা নাম চলে আসে, তাহলে মূল নামটিই রেখে দেওয়া
+        if (!namePart) namePart = trimmedString;
+
         item['পণ্যের নাম'] = namePart || 'অজানা পণ্য';
         item['পরিমাণ'] = '১ টি';
-        item['দাম'] = detectedPrice; // দাম সঠিকভাবে বসানো হচ্ছে
+        item['দাম'] = detectedPrice;
       }
 
       productList.push(item);
@@ -220,13 +225,9 @@
       messageDiv.textContent = `✅ ${item['পণ্যের নাম'] || item.name || 'পণ্য'} স্ক্যান সফল`;
       messageDiv.className = 'success';
       if (navigator.vibrate) navigator.vibrate(200);
-
-      setTimeout(() => {
-        isProcessing = false;
-      }, 1500);
     }
 
-    // ক্যামেরা কনফিগার
+    // ক্যামেরা কনফিগার (দ্রুত স্ক্যানিংয়ের জন্য fps ১০-ই ভালো)
     const html5QrCode = new Html5Qrcode("reader");
     const formatsToSupport = [
       Html5QrcodeSupportedFormats.QR_CODE, Html5QrcodeSupportedFormats.EAN_13,
