@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
-  <title>ডায়নামিক QR ও বারকোড স্ক্যানার</title>
+  <title>অপটিমাইজড QR & বারকোড স্ক্যানার</title>
   <script src="https://unpkg.com/html5-qrcode"></script>
   <style>
     body { font-family: 'Segoe UI', sans-serif; padding: 15px; max-width: 650px; margin: auto; background: #f5f5f5; }
@@ -16,7 +16,7 @@
     #saveBtn { background: #27ae60; color: white; }
     #clearBtn { background: #e67e22; color: white; }
     #soundToggleBtn { background: #3498db; color: white; }
-    #stopScanBtn { background: #000000; color: white; } /* ✅ কালো ব্যাকগ্রাউন্ড */
+    #stopScanBtn { background: #000000; color: white; }
     .delete-btn { background: #e74c3c; color: white; padding: 5px 10px; border-radius: 4px; font-size: 14px; border: none; }
     #reader { width: 100%; max-width: 350px; margin: 0 auto 20px; }
     #message { margin-top: 12px; font-weight: bold; text-align: center; }
@@ -25,8 +25,8 @@
   </style>
 </head>
 <body>
-  <h2>📷 ডায়নামিক QR & বারকোড স্ক্যানার</h2>
-  <p>স্ক্যান করা তথ্য অনুযায়ী কলাম ও সারি নিজেই তৈরি হবে।</p>
+  <h2>📷 অপটিমাইজড QR & বারকোড স্ক্যানার</h2>
+  <p>স্ক্যান করা তথ্য অনুযায়ী কলাম ও সারি নিজেই তৈরি হবে (Code 128 সমর্থিত)।</p>
   <div id="reader"></div>
   <div style="text-align:center; margin-top:10px;">
     <button id="stopScanBtn" style="display:none;">🛑 স্ক্যান থামান</button>
@@ -162,20 +162,18 @@
       localStorage.setItem('productList', JSON.stringify(productList));
     }
 
-    // ✅ দ্রুত স্ক্যানিং ও ডুপ্লিকেট চেক (লক অপ্টিমাইজ করা)
     function processQRData(qrString) {
-      if (isProcessing) return; // প্রসেসিং থাকলে নতুন স্ক্যান নিবে না
+      if (isProcessing) return;
 
       const trimmedString = qrString.trim();
 
-      // একই পণ্য স্ক্যান করলে কনফার্ম ডায়ালগ
       if (lastScannedText === trimmedString) {
         if (!confirm('⚠️ এই পণ্যটি ইতিমধ্যে স্ক্যান করা হয়েছে। কি আরেকটি নতুন কপি হিসেবে যুক্ত করতে চান?')) {
           return; 
         }
       }
 
-      isProcessing = true; // লক চালু
+      isProcessing = true;
       lastScannedText = trimmedString;
       playBeep();
 
@@ -185,7 +183,6 @@
       const parts = trimmedString.split('|');
       let foundKeys = false;
       
-      // ১. key=value ফরম্যাট চেক করা
       parts.forEach(part => {
         if (part.includes('=')) {
           const kv = part.split('=');
@@ -196,19 +193,17 @@
         }
       });
 
-      // ২. সাধারণ টেক্সট বা লিংক পার্স করা
       if (!foundKeys) {
         let namePart = trimmedString;
         let detectedPrice = 0;
         
-        // টেক্সটের ভেতরে "দাম" বা "price" খোঁজা
         const priceMatch = namePart.match(/(?:দাম|price|টাকা|৳|Rs\.?)\s*(\d+)/i);
         if (priceMatch && priceMatch[1]) {
           detectedPrice = parseFloat(priceMatch[1]);
           namePart = namePart.replace(/(?:দাম|price|টাকা|৳|Rs\.?)\s*\d+\s*(?:টাকা)?/i, '').trim();
         }
         
-        if (!namePart) namePart = trimmedString; // যদি শুধু দাম ফাঁকা আসে, মূল টেক্সট রাখা
+        if (!namePart) namePart = trimmedString;
 
         item['পণ্যের নাম'] = namePart || 'অজানা পণ্য';
         item['পরিমাণ'] = '১ টি';
@@ -221,13 +216,9 @@
       messageDiv.className = 'success';
       if (navigator.vibrate) navigator.vibrate(200);
 
-      // ✅ ৩০০ মিলি সেকেন্ড পরে লক খোলা (ভীষণ দ্রুত স্ক্যানিং)
-      setTimeout(() => {
-        isProcessing = false; 
-      }, 300);
+      setTimeout(() => { isProcessing = false; }, 500);
     }
 
-    // ✅ সকল প্রকার বারকোড ফরম্যাট সমর্থন
     const html5QrCode = new Html5Qrcode("reader");
     const formatsToSupport = [
       Html5QrcodeSupportedFormats.QR_CODE,
@@ -237,7 +228,9 @@
       Html5QrcodeSupportedFormats.CODABAR, Html5QrcodeSupportedFormats.CODE_93,
       Html5QrcodeSupportedFormats.ITF
     ];
-    const config = { fps: 10, qrbox: { width: 250, height: 250 }, formatsToSupport };
+
+    // 🔥 Code 128 এর জন্য বড় বক্স এবং ধীর গতি (আরও সেন্সিটিভ)
+    const config = { fps: 5, qrbox: { width: 300, height: 100 }, formatsToSupport };
 
     function startScanner() {
       html5QrCode.start({ facingMode: "environment" }, config, 
