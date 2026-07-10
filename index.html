@@ -15,7 +15,7 @@
     button { padding: 12px 18px; margin: 4px; border: none; border-radius: 6px; font-size: 15px; cursor: pointer; }
     #saveBtn { background: #27ae60; color: white; }
     #clearBtn { background: #e67e22; color: white; }
-    #soundToggleBtn { background: #3498db; color: white; } /* নতুন বাটন */
+    #soundToggleBtn { background: #3498db; color: white; }
     .delete-btn { background: #e74c3c; color: white; padding: 5px 10px; border-radius: 4px; font-size: 14px; border: none; }
     #reader { width: 100%; max-width: 350px; margin: 0 auto 20px; }
     #message { margin-top: 12px; font-weight: bold; text-align: center; }
@@ -51,9 +51,9 @@
     const SCRIPT_URL = 'https://script.google.com/macros/s/XXXXX/exec'; 
 
     let productList = []; 
-    let lastScannedText = ''; // ডুপ্লিকেট স্ক্যান আটকানোর ভেরিয়েবল
-    let isProcessing = false; // ব্লক করা হচ্ছে কিনা
-    let isSoundOn = true; // শব্দ চালু আছে কিনা
+    let lastScannedText = ''; 
+    let isProcessing = false; 
+    let isSoundOn = true;
 
     const tableHead = document.getElementById('tableHead');
     const tableBody = document.getElementById('tableBody');
@@ -95,7 +95,7 @@
       renderTable();
     } catch(e) {}
 
-    // ✅ টেবিল রেন্ডার (ফুটার সারিবদ্ধ করা)
+    // ✅ টেবিল রেন্ডার
     function renderTable() {
       const allKeys = new Set();
       productList.forEach(item => {
@@ -140,13 +140,14 @@
             td.appendChild(delBtn);
           } else {
             let val = item[header] || '';
-            if (header === 'দাম' || header === 'price') {
+            if (header === 'দাম' || header.toLowerCase() === 'price') {
               let priceNum = parseFloat(val) || 0;
               totalPrice += priceNum;
               val = priceNum > 0 ? priceNum + ' টাকা' : '0';
+            } else if (header === 'পণ্যের নাম') {
+              totalItems++;
             }
             td.textContent = val;
-            if(header === 'পণ্যের নাম') totalItems++;
           }
           tr.appendChild(td);
         });
@@ -160,7 +161,7 @@
       footerRow.innerHTML = `
         <td colspan="2" style="text-align:right; font-weight:bold;">মোট পণ্য:</td>
         <td style="font-weight:bold;">${totalItems}</td>
-        <td style="font-weight:bold;">${totalPrice} টাকা</td>
+        <td style="font-weight:bold;">${totalPrice > 0 ? totalPrice + ' টাকা' : '0 টাকা'}</td>
         <td></td>
       `;
       tableFoot.appendChild(footerRow);
@@ -168,24 +169,21 @@
       localStorage.setItem('productList', JSON.stringify(productList));
     }
 
-    // ✅ উন্নত স্ক্যান লজিক (একবার স্ক্যান + অটোমেটিক দাম বের করা)
+    // ✅ স্মার্ট পার্সিং লজিক (ফিক্স করা হয়েছে)
     function processQRData(qrString) {
       const trimmedString = qrString.trim();
 
-      // 🔥 ডুপ্লিকেট স্ক্যান আটকানো (একই QR ক্যামেরায় ধরে রাখলে আর স্ক্যান করবে না)
       if (lastScannedText === trimmedString || isProcessing) {
         return; 
       }
       isProcessing = true;
       lastScannedText = trimmedString;
 
-      // শব্দ বাজানো
       playBeep();
 
       const today = new Date().toLocaleDateString('bn-BD', { year: 'numeric', month: '2-digit', day: '2-digit' });
       const item = { date: today };
       
-      // ১. ডেটা পার্স করা
       const parts = trimmedString.split('|');
       let foundKeys = false;
       
@@ -199,21 +197,22 @@
         }
       });
 
-      // ২. যদি সাধারণ টেক্সট হয়, তবে দাম বের করার লজিক
+      // 🔥 টেক্সট থেকে দাম শনাক্ত করা ও নাম থেকে দাম সরিয়ে ফেলা (বাগ ফিক্স)
       if (!foundKeys) {
         let namePart = trimmedString;
         let detectedPrice = 0;
         
-        // টেক্সটের ভেতরে "দাম" বা "Price" খোঁজা (যেমন: বাংলা বই দাম ১৫০ টাকা)
+        // টেক্সটের ভেতরে "দাম" বা "Price" খোঁজা
         const priceMatch = namePart.match(/(?:দাম|price)\s*(\d+)/i);
         if (priceMatch && priceMatch[1]) {
           detectedPrice = parseFloat(priceMatch[1]);
+          // রিপ্লেস করার সময় পুরো অংশটি সঠিকভাবে সরানো হচ্ছে
           namePart = namePart.replace(/(?:দাম|price)\s*\d+\s*(?:টাকা)?/i, '').trim();
         }
         
-        item['পণ্যের নাম'] = namePart;
+        item['পণ্যের নাম'] = namePart || 'অজানা পণ্য';
         item['পরিমাণ'] = '১ টি';
-        item['দাম'] = detectedPrice;
+        item['দাম'] = detectedPrice; // দাম সঠিকভাবে বসানো হচ্ছে
       }
 
       productList.push(item);
@@ -222,13 +221,12 @@
       messageDiv.className = 'success';
       if (navigator.vibrate) navigator.vibrate(200);
 
-      // 🔥 ১.৫ সেকেন্ড পর লক খোলা (যাতে ভিন্ন পণ্য দ্রুত স্ক্যান করা যায়)
       setTimeout(() => {
         isProcessing = false;
       }, 1500);
     }
 
-    // ক্যামেরা ও বারকোড কনফিগার
+    // ক্যামেরা কনফিগার
     const html5QrCode = new Html5Qrcode("reader");
     const formatsToSupport = [
       Html5QrcodeSupportedFormats.QR_CODE, Html5QrcodeSupportedFormats.EAN_13,
@@ -247,7 +245,6 @@
       html5QrCode.stop().then(() => stopScanBtn.style.display = 'none');
     };
 
-    // Google Sheet-এ সেভ
     saveBtn.addEventListener('click', () => {
       if (productList.length === 0) return alert('তালিকা খালি');
       fetch(SCRIPT_URL, {
