@@ -63,14 +63,12 @@
     const messageDiv = document.getElementById('message');
     const stopScanBtn = document.getElementById('stopScanBtn');
 
-    // 🔥 শব্দ চালু/বন্ধ করার বাটন ইভেন্ট
     soundToggleBtn.addEventListener('click', () => {
       isSoundOn = !isSoundOn;
       soundToggleBtn.textContent = isSoundOn ? '🔊 স্ক্যান শব্দ: চালু' : '🔇 স্ক্যান শব্দ: বন্ধ';
       soundToggleBtn.style.background = isSoundOn ? '#3498db' : '#7f8c8d';
     });
 
-    // 🔥 বিপ শব্দ তৈরি ফাংশন
     function playBeep() {
       if (!isSoundOn) return;
       try {
@@ -94,7 +92,6 @@
       renderTable();
     } catch(e) {}
 
-    // ✅ টেবিল রেন্ডার
     function renderTable() {
       const allKeys = new Set();
       productList.forEach(item => {
@@ -105,7 +102,6 @@
       const finalHeaders = Array.from(allKeys).filter(k => !defaultHeaders.includes(k));
       const headers = [...defaultHeaders, ...finalHeaders, 'delete'];
 
-      // হেডার
       tableHead.innerHTML = '';
       const headerRow = document.createElement('tr');
       headers.forEach(header => {
@@ -117,7 +113,6 @@
       });
       tableHead.appendChild(headerRow);
 
-      // বডি
       tableBody.innerHTML = '';
       let totalItems = 0;
       let totalPrice = 0;
@@ -153,7 +148,6 @@
         tableBody.appendChild(tr);
       });
 
-      // ফুটার (মোট পণ্য ও মোট দাম)
       tableFoot.innerHTML = '';
       const footerRow = document.createElement('tr');
       footerRow.className = 'totals';
@@ -168,18 +162,16 @@
       localStorage.setItem('productList', JSON.stringify(productList));
     }
 
-    // ✅ দ্রুত স্ক্যানিং ও ডুপ্লিকেট কনফার্মেশন লজিক
     function processQRData(qrString) {
       const trimmedString = qrString.trim();
 
-      // 🔥 একই পণ্য স্ক্যান করলে কনফার্ম বক্স (হ্যাঁ/না) আসবে
+      // একই পণ্য স্ক্যান করলে কনফার্ম বক্স
       if (lastScannedText === trimmedString) {
         if (!confirm('⚠️ এই পণ্যটি ইতিমধ্যে স্ক্যান করা হয়েছে। কি আরেকটি নতুন কপি হিসেবে যুক্ত করতে চান?')) {
-          return; // যদি 'না' দেন তাহলে কিছু হবে না
+          return; 
         }
       }
 
-      // 🔥 দ্রুত স্ক্যানিং: এখন কোনো টাইম লক (setTimeout) নেই
       lastScannedText = trimmedString;
       playBeep();
 
@@ -199,20 +191,17 @@
         }
       });
 
-      // 🔥 টেক্সট থেকে দাম শনাক্ত করার উন্নত লজিক
+      // টেক্সট থেকে দাম শনাক্তকরণ
       if (!foundKeys) {
         let namePart = trimmedString;
         let detectedPrice = 0;
         
-        // টেক্সটের ভেতরে "দাম", "price", "টাকা", "৳" খোঁজা (শুধুমাত্র ফরম্যাট থাকলে)
         const priceMatch = namePart.match(/(?:দাম|price|টাকা|৳|Rs\.?)\s*(\d+)/i);
         if (priceMatch && priceMatch[1]) {
           detectedPrice = parseFloat(priceMatch[1]);
-          // টেক্সট থেকে দামের অংশ বাদ দেওয়া
           namePart = namePart.replace(/(?:দাম|price|টাকা|৳|Rs\.?)\s*\d+\s*(?:টাকা)?/i, '').trim();
         }
         
-        // যদি ফাঁকা নাম চলে আসে, তাহলে মূল নামটিই রেখে দেওয়া
         if (!namePart) namePart = trimmedString;
 
         item['পণ্যের নাম'] = namePart || 'অজানা পণ্য';
@@ -227,7 +216,6 @@
       if (navigator.vibrate) navigator.vibrate(200);
     }
 
-    // ক্যামেরা কনফিগার (দ্রুত স্ক্যানিংয়ের জন্য fps ১০-ই ভালো)
     const html5QrCode = new Html5Qrcode("reader");
     const formatsToSupport = [
       Html5QrcodeSupportedFormats.QR_CODE, Html5QrcodeSupportedFormats.EAN_13,
@@ -236,11 +224,17 @@
     ];
     const config = { fps: 10, qrbox: { width: 250, height: 250 }, formatsToSupport };
 
-    html5QrCode.start({ facingMode: "environment" }, config, 
-      decodedText => processQRData(decodedText),
-      err => {}
-    ).then(() => stopScanBtn.style.display = 'inline-block')
-     .catch(err => alert('ক্যামেরা অনুমতি দিন'));
+    // ✅ এই ফাংশনটি স্ক্যানার চালু করবে (আগের কোডে এটি মিসিং ছিল)
+    function startScanner() {
+      html5QrCode.start({ facingMode: "environment" }, config, 
+        decodedText => processQRData(decodedText),
+        err => {}
+      ).then(() => stopScanBtn.style.display = 'inline-block')
+       .catch(err => alert('ক্যামেরা অনুমতি দিন'));
+    }
+
+    // ✅ পেজ লোড হলে স্ক্যানার চালু করার ইভেন্ট
+    window.addEventListener('load', startScanner);
 
     stopScanBtn.onclick = () => {
       html5QrCode.stop().then(() => stopScanBtn.style.display = 'none');
