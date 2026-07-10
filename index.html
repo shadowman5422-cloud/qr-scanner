@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
-  <title>ডায়নামিক QR ও বারকোড স্ক্যানার (আপডেটেড)</title>
+  <title>ডায়নামিক QR ও বারকোড স্ক্যানার</title>
   <script src="https://unpkg.com/html5-qrcode"></script>
   <style>
     body { font-family: 'Segoe UI', sans-serif; padding: 15px; max-width: 650px; margin: auto; background: #f5f5f5; }
@@ -16,8 +16,7 @@
     #saveBtn { background: #27ae60; color: white; }
     #clearBtn { background: #e67e22; color: white; }
     #soundToggleBtn { background: #3498db; color: white; }
-    /* ✅ স্ক্যান থামান বোতাম কালো করা হয়েছে */
-    #stopScanBtn { background: #000000; color: white; border: 1px solid #555; }
+    #stopScanBtn { background: #000000; color: white; } /* ✅ কালো ব্যাকগ্রাউন্ড */
     .delete-btn { background: #e74c3c; color: white; padding: 5px 10px; border-radius: 4px; font-size: 14px; border: none; }
     #reader { width: 100%; max-width: 350px; margin: 0 auto 20px; }
     #message { margin-top: 12px; font-weight: bold; text-align: center; }
@@ -49,13 +48,11 @@
   <div id="message"></div>
 
   <script>
-    // ⚙️ আপনার Google Apps Script ওয়েব অ্যাপ URL বসান
     const SCRIPT_URL = 'https://script.google.com/macros/s/XXXXX/exec'; 
 
     let productList = []; 
     let lastScannedText = ''; 
     let isSoundOn = true;
-    // ✅ বারবার স্ক্যান আটকানোর জন্য লক
     let isProcessing = false;
 
     const tableHead = document.getElementById('tableHead');
@@ -87,7 +84,7 @@
         gainNode.connect(audioCtx.destination);
         oscillator.start();
         oscillator.stop(audioCtx.currentTime + 0.1);
-      } catch(e) { /* শব্দ তৈরি না হলে ইগনোর */ }
+      } catch(e) {}
     }
 
     try {
@@ -162,27 +159,23 @@
         <td></td>
       `;
       tableFoot.appendChild(footerRow);
-      
       localStorage.setItem('productList', JSON.stringify(productList));
     }
 
-    // ✅ স্ক্যান লজিক (একাধিক ভিন্ন QR ও বারকোড নেওয়ার জন্য ফিক্স)
+    // ✅ দ্রুত স্ক্যানিং ও ডুপ্লিকেট চেক (লক অপ্টিমাইজ করা)
     function processQRData(qrString) {
-      // যদি প্রসেসিং চলমান থাকে, তবে নতুন ইনপুট নিবে না (লক)
-      if (isProcessing) return; 
-      
-      isProcessing = true; // লক চালু
+      if (isProcessing) return; // প্রসেসিং থাকলে নতুন স্ক্যান নিবে না
+
       const trimmedString = qrString.trim();
 
-      // একই পণ্য স্ক্যান করলে কনফার্ম বক্স
+      // একই পণ্য স্ক্যান করলে কনফার্ম ডায়ালগ
       if (lastScannedText === trimmedString) {
         if (!confirm('⚠️ এই পণ্যটি ইতিমধ্যে স্ক্যান করা হয়েছে। কি আরেকটি নতুন কপি হিসেবে যুক্ত করতে চান?')) {
-          // যদি 'না' দেয়, ৪০০ মিলিসেকেন্ড পর লক খুলে আবার নতুন স্ক্যান নিবে
-          setTimeout(() => { isProcessing = false; }, 400);
           return; 
         }
       }
 
+      isProcessing = true; // লক চালু
       lastScannedText = trimmedString;
       playBeep();
 
@@ -192,6 +185,7 @@
       const parts = trimmedString.split('|');
       let foundKeys = false;
       
+      // ১. key=value ফরম্যাট চেক করা
       parts.forEach(part => {
         if (part.includes('=')) {
           const kv = part.split('=');
@@ -202,16 +196,19 @@
         }
       });
 
+      // ২. সাধারণ টেক্সট বা লিংক পার্স করা
       if (!foundKeys) {
         let namePart = trimmedString;
         let detectedPrice = 0;
         
+        // টেক্সটের ভেতরে "দাম" বা "price" খোঁজা
         const priceMatch = namePart.match(/(?:দাম|price|টাকা|৳|Rs\.?)\s*(\d+)/i);
         if (priceMatch && priceMatch[1]) {
           detectedPrice = parseFloat(priceMatch[1]);
           namePart = namePart.replace(/(?:দাম|price|টাকা|৳|Rs\.?)\s*\d+\s*(?:টাকা)?/i, '').trim();
         }
-        if (!namePart) namePart = trimmedString;
+        
+        if (!namePart) namePart = trimmedString; // যদি শুধু দাম ফাঁকা আসে, মূল টেক্সট রাখা
 
         item['পণ্যের নাম'] = namePart || 'অজানা পণ্য';
         item['পরিমাণ'] = '১ টি';
@@ -224,25 +221,21 @@
       messageDiv.className = 'success';
       if (navigator.vibrate) navigator.vibrate(200);
 
-      // ✅ দ্রুত একের পর এক স্ক্যানের জন্য ৫০০ মিলিসেকেন্ড পর লক খোলা
+      // ✅ ৩০০ মিলি সেকেন্ড পরে লক খোলা (ভীষণ দ্রুত স্ক্যানিং)
       setTimeout(() => {
         isProcessing = false; 
-      }, 500);
+      }, 300);
     }
 
+    // ✅ সকল প্রকার বারকোড ফরম্যাট সমর্থন
     const html5QrCode = new Html5Qrcode("reader");
-    // ✅ সকল প্রকার বারকোড এখানে যুক্ত করা হয়েছে (QR + সমস্ত 1D বারকোড)
     const formatsToSupport = [
       Html5QrcodeSupportedFormats.QR_CODE,
-      Html5QrcodeSupportedFormats.EAN_13,
-      Html5QrcodeSupportedFormats.EAN_8,
-      Html5QrcodeSupportedFormats.UPC_A,
-      Html5QrcodeSupportedFormats.UPC_E,       // যুক্ত করা হয়েছে
-      Html5QrcodeSupportedFormats.CODE_128,
-      Html5QrcodeSupportedFormats.CODE_39,     // যুক্ত করা হয়েছে
-      Html5QrcodeSupportedFormats.CODABAR,     // যুক্ত করা হয়েছে
-      Html5QrcodeSupportedFormats.CODE_93,     // যুক্ত করা হয়েছে
-      Html5QrcodeSupportedFormats.ITF          // যুক্ত করা হয়েছে
+      Html5QrcodeSupportedFormats.EAN_13, Html5QrcodeSupportedFormats.EAN_8,
+      Html5QrcodeSupportedFormats.UPC_A, Html5QrcodeSupportedFormats.UPC_E,
+      Html5QrcodeSupportedFormats.CODE_128, Html5QrcodeSupportedFormats.CODE_39,
+      Html5QrcodeSupportedFormats.CODABAR, Html5QrcodeSupportedFormats.CODE_93,
+      Html5QrcodeSupportedFormats.ITF
     ];
     const config = { fps: 10, qrbox: { width: 250, height: 250 }, formatsToSupport };
 
