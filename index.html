@@ -17,7 +17,7 @@
     #clearBtn { background: #e67e22; color: white; }
     #soundToggleBtn { background: #3498db; color: white; }
     #stopScanBtn { background: #000000; color: white; }
-    #startScanBtn { background: #2ecc71; color: white; display: none; } /* নতুন শুরু বাটন */
+    #startScanBtn { background: #2ecc71; color: white; display: none; }
     .delete-btn { background: #e74c3c; color: white; padding: 5px 10px; border-radius: 4px; font-size: 14px; border: none; }
     #reader { width: 100%; max-width: 350px; margin: 0 auto 20px; }
     #message { margin-top: 12px; font-weight: bold; text-align: center; }
@@ -30,8 +30,8 @@
   <p>সকল ফরম্যাট (JSON, key=value, সাধারণ টেক্সট) সমর্থন করে।</p>
   <div id="reader"></div>
   <div style="text-align:center; margin-top:10px; display:flex; justify-content:center; gap:10px; flex-wrap:wrap;">
+    <button id="startScanBtn">▶️ স্ক্যান করুন</button>
     <button id="stopScanBtn" style="display:none;">🛑 স্ক্যান থামান</button>
-    <button id="startScanBtn">▶️ স্ক্যান করুন</button> <!-- নতুন বাটন -->
     <button id="soundToggleBtn">🔊 স্ক্যান শব্দ: চালু</button>
   </div>
 
@@ -102,9 +102,12 @@
         Object.keys(item).forEach(key => allKeys.add(key));
       });
       
-      const defaultHeaders = ['date'];
+      // আমরা নির্দিষ্ট কলামগুলো ইংরেজি বা বাংলায় অর্ডার করব
+      const defaultHeaders = ['date', 'name', 'price', 'sku', 'currency'];
       const finalHeaders = Array.from(allKeys).filter(k => !defaultHeaders.includes(k));
-      const headers = [...defaultHeaders, ...finalHeaders, 'delete'];
+      
+      // হেডার অর্ডার ফিক্স করা (যাতে নাম ও দাম সঠিক কলামে আসে)
+      const headers = ['date', 'name', 'price', ...finalHeaders, 'delete'];
 
       tableHead.innerHTML = '';
       const headerRow = document.createElement('tr');
@@ -112,19 +115,22 @@
         const th = document.createElement('th');
         if(header === 'date') th.textContent = 'তারিখ';
         else if(header === 'delete') th.textContent = 'মুছুন';
-        else if(header === 'name') th.textContent = 'পণ্যের নাম'; // ✅ name কে পণ্যের নামে পরিবর্তন
-        else if(header === 'price') th.textContent = 'দাম';      // ✅ price কে দামে পরিবর্তন
+        else if(header === 'name') th.textContent = 'পণ্যের নাম';
+        else if(header === 'price') th.textContent = 'দাম';
         else th.textContent = header;
         headerRow.appendChild(th);
       });
       tableHead.appendChild(headerRow);
 
+      // ✅ টেবিল বডি এবং হিসাব (অত্যন্ত গুরুত্বপূর্ণ ফিক্স)
       tableBody.innerHTML = '';
       let totalItems = 0;
       let totalPrice = 0;
 
       productList.forEach((item, index) => {
         const tr = document.createElement('tr');
+        totalItems = index + 1; // ✅ সঠিক পণ্য গণনা (মানুষের চোখে দেখা অনুযায়ী)
+
         headers.forEach(header => {
           const td = document.createElement('td');
           if (header === 'delete') {
@@ -144,8 +150,6 @@
               let priceNum = parseFloat(val) || 0;
               totalPrice += priceNum;
               val = priceNum > 0 ? priceNum + ' টাকা' : '0';
-            } else if (header === 'date' || header === 'name') {
-              totalItems++; // ✅ প্রতিটি সারির জন্য পণ্য গণনা
             }
             td.textContent = val;
           }
@@ -154,21 +158,22 @@
         tableBody.appendChild(tr);
       });
 
+      // ✅ চূড়ান্ত ফুটার (মোট পণ্য ও মোট দাম ঠিক কলামের নিচে)
       tableFoot.innerHTML = '';
       const footerRow = document.createElement('tr');
       footerRow.className = 'totals';
-      // ✅ ফুটারটি ঠিক করা হয়েছে: তারিখ কলামে পণ্য সংখ্যা, দাম কলামে মোট টাকা
       footerRow.innerHTML = `
-        <td colspan="2" style="text-align:right; font-weight:bold;">মোট পণ্য:</td>
+        <td style="text-align:right; font-weight:bold;">মোট পণ্য:</td>
         <td style="font-weight:bold;">${totalItems}</td>
         <td style="font-weight:bold;">${totalPrice > 0 ? totalPrice + ' টাকা' : '0 টাকা'}</td>
+        <td></td>
         <td></td>
       `;
       tableFoot.appendChild(footerRow);
       localStorage.setItem('productList', JSON.stringify(productList));
     }
 
-    // ✅ স্মার্ট পার্সিং ফাংশন (JSON + Key=Value + সাধারণ টেক্সট)
+    // ✅ JSON বা টেক্সট পার্সিং
     function processQRData(qrString) {
       if (isProcessing) return;
 
@@ -187,7 +192,7 @@
       const today = new Date().toLocaleDateString('bn-BD', { year: 'numeric', month: '2-digit', day: '2-digit' });
       const item = { date: today };
       
-      // ১. JSON ফরম্যাট চেক করা
+      // ১. JSON চেক
       try {
         const jsonData = JSON.parse(trimmedString);
         for (const [key, value] of Object.entries(jsonData)) {
@@ -200,14 +205,11 @@
         if (navigator.vibrate) navigator.vibrate(200);
         setTimeout(() => { isProcessing = false; }, 500);
         return;
-      } catch (e) {
-        // JSON না হলে নিচের লজিক চলবে
-      }
+      } catch (e) {}
 
-      // ২. Key=Value ফরম্যাট
+      // ২. Key=Value চেক
       const parts = trimmedString.split('|');
       let foundKeys = false;
-      
       parts.forEach(part => {
         if (part.includes('=')) {
           const kv = part.split('=');
@@ -218,41 +220,35 @@
         }
       });
 
-      // ৩. সাধারণ টেক্সট/বারকোড ফরম্যাট
+      // ৩. সাধারণ টেক্সট
       if (!foundKeys) {
         let namePart = trimmedString;
         let detectedPrice = 0;
-        
         const priceMatch = namePart.match(/(?:দাম|price|টাকা|৳|Rs\.?)\s*(\d+)/i);
         if (priceMatch && priceMatch[1]) {
           detectedPrice = parseFloat(priceMatch[1]);
           namePart = namePart.replace(/(?:দাম|price|টাকা|৳|Rs\.?)\s*\d+\s*(?:টাকা)?/i, '').trim();
         }
-        
         if (!namePart) namePart = trimmedString;
-
-        item['পণ্যের নাম'] = namePart || 'অজানা পণ্য';
-        item['পরিমাণ'] = '১ টি';
-        item['দাম'] = detectedPrice;
+        item['name'] = namePart || 'অজানা পণ্য';
+        item['price'] = detectedPrice;
       }
 
       productList.push(item);
       renderTable();
-      messageDiv.textContent = `✅ ${item['পণ্যের নাম'] || item.name || 'পণ্য'} স্ক্যান সফল`;
+      messageDiv.textContent = `✅ ${item.name || item['পণ্যের নাম'] || 'পণ্য'} স্ক্যান সফল`;
       messageDiv.className = 'success';
       if (navigator.vibrate) navigator.vibrate(200);
-
       setTimeout(() => { isProcessing = false; }, 500);
     }
 
     const html5QrCode = new Html5Qrcode("reader");
     const formatsToSupport = [
-      Html5QrcodeSupportedFormats.QR_CODE,
-      Html5QrcodeSupportedFormats.EAN_13, Html5QrcodeSupportedFormats.EAN_8,
-      Html5QrcodeSupportedFormats.UPC_A, Html5QrcodeSupportedFormats.UPC_E,
-      Html5QrcodeSupportedFormats.CODE_128, Html5QrcodeSupportedFormats.CODE_39,
-      Html5QrcodeSupportedFormats.CODABAR, Html5QrcodeSupportedFormats.CODE_93,
-      Html5QrcodeSupportedFormats.ITF
+      Html5QrcodeSupportedFormats.QR_CODE, Html5QrcodeSupportedFormats.EAN_13,
+      Html5QrcodeSupportedFormats.EAN_8, Html5QrcodeSupportedFormats.UPC_A,
+      Html5QrcodeSupportedFormats.UPC_E, Html5QrcodeSupportedFormats.CODE_128,
+      Html5QrcodeSupportedFormats.CODE_39, Html5QrcodeSupportedFormats.CODABAR,
+      Html5QrcodeSupportedFormats.CODE_93, Html5QrcodeSupportedFormats.ITF
     ];
     const config = { fps: 5, qrbox: { width: 300, height: 100 }, formatsToSupport };
 
@@ -262,19 +258,17 @@
         err => {}
       ).then(() => {
         stopScanBtn.style.display = 'inline-block';
-        startScanBtn.style.display = 'none'; // ✅ শুরু হলে লুকিয়ে যাবে
+        startScanBtn.style.display = 'none';
       }).catch(err => alert('ক্যামেরা অনুমতি দিন'));
     }
 
-    // ✅ থামানোর ইভেন্ট (ক্যামেরা বন্ধ)
     stopScanBtn.onclick = () => {
       html5QrCode.stop().then(() => {
         stopScanBtn.style.display = 'none';
-        startScanBtn.style.display = 'inline-block'; // ✅ থামলে দেখাবে
+        startScanBtn.style.display = 'inline-block';
       });
     };
 
-    // ✅ নতুন "স্ক্যান করুন" বাটনের ইভেন্ট (আবার ক্যামেরা চালু)
     startScanBtn.onclick = () => {
       startScanner();
     };
