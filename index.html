@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
-  <title>স্মার্ট QR ও বারকোড স্ক্যানার</title>
+  <title>স্মার্ট QR ও বারকোড স্ক্যানার (নির্ভুল পার্সিং)</title>
   <script src="https://unpkg.com/html5-qrcode"></script>
   <style>
     body { font-family: 'Segoe UI', sans-serif; padding: 15px; max-width: 650px; margin: auto; background: #f5f5f5; }
@@ -27,7 +27,7 @@
 </head>
 <body>
   <h2>📷 স্মার্ট QR & বারকোড স্ক্যানার</h2>
-  <p>JSON, key=value এবং pipe(|) সেপারেটর সমর্থন করে।</p>
+  <p>JSON, key=value এবং pipe(|) সেপারেটর সঠিকভাবে পার্স করে।</p>
   <div id="reader"></div>
   <div style="text-align:center; margin-top:10px; display:flex; justify-content:center; gap:10px; flex-wrap:wrap;">
     <button id="startScanBtn">▶️ স্ক্যান করুন</button>
@@ -169,7 +169,7 @@
       localStorage.setItem('productList', JSON.stringify(productList));
     }
 
-    // ✅ পার্সিং লজিক (JSON, =, এবং | সব সমর্থন করে)
+    // ✅ সঠিক পার্সিং লজিক
     function processQRData(qrString) {
       if (isProcessing) return;
 
@@ -188,7 +188,7 @@
       const today = new Date().toLocaleDateString('bn-BD', { year: 'numeric', month: '2-digit', day: '2-digit' });
       const item = { date: today };
       
-      // ১. JSON চেক
+      // ১. JSON ফরম্যাট চেক
       try {
         const jsonData = JSON.parse(trimmedString);
         for (const [key, value] of Object.entries(jsonData)) {
@@ -203,12 +203,12 @@
         return;
       } catch (e) {}
 
-      // ২. Key=Value ফরম্যাট চেক (এটি স্ট্যান্ডার্ড QR ফরম্যাট)
-      const partsEq = trimmedString.split('|');
+      // ২. Key=Value ফরম্যাট চেক
+      const parts = trimmedString.split('|');
       let foundKeysEq = false;
       let tempItem = {};
       
-      partsEq.forEach(part => {
+      parts.forEach(part => {
         if (part.includes('=')) {
           const kv = part.split('=');
           if (kv.length === 2) {
@@ -218,25 +218,37 @@
         }
       });
 
-      // ৩. সাধারণ বারকোড বা পাইপ(|) ফরম্যাট (যেমন: SKU|Price|Name)
-      // বারকোডে সাধারণত `=` থাকে না, কিন্তু `|` দিয়ে ডেটা ভাগ থাকে
-      if (!foundKeysEq) {
-        const partsPipe = trimmedString.split('|');
-        if (partsPipe.length >= 2) {
-            // ধরলাম বারকোড ফরম্যাট: SKU|Price|Name অথবা SKU|Name
-            item['sku'] = partsPipe[0].trim();
+      // ৩. যদি Key=Value পাওয়া যায়, সেটা আইটেমে যোগ
+      if (foundKeysEq) {
+        for (const [key, value] of Object.entries(tempItem)) {
+            item[key] = value;
+        }
+      } 
+      else {
+        // ৪. সাধারণ বারকোড বা পাইপ(|) ফরম্যাট (সবচেয়ে সিম্পল লজিক)
+        // ফরম্যাট ধরে নিচ্ছি: SKU|Price|Name
+        if (parts.length >= 2) {
+            item['sku'] = parts[0].trim();
             
-            // চেক করা হচ্ছে ২য় অংশটি দাম কিনা (সংখ্যা হলে দাম, না হলে নাম)
-            const possiblePrice = parseFloat(partsPipe[1].trim());
-            if (!isNaN(possiblePrice)) {
-                item['price'] = possiblePrice;
-                item['name'] = partsPipe[2] ? partsPipe[2].trim() : 'পণ্য';
+            // মাঝের অংশটি দাম, শেষের অংশটি নাম
+            // আমরা parseFloat করার আগে শিউর হয়ে যাচ্ছি
+            let tempPrice = parseFloat(parts[1].trim());
+            if (!isNaN(tempPrice)) {
+                item['price'] = tempPrice;
             } else {
-                item['name'] = partsPipe[1].trim();
-                item['price'] = 0;
+                // যদি দাম না থাকে (যেমন দোকানের সাধারণ পণ্য), তবে 0 বসবে
+                item['price'] = 0; 
             }
-        } else {
-            // ৪. সাধারণ টেক্সট (যদি কোনো সেপারেটর না থাকে)
+
+            // নামের জন্য শেষ অংশ বসানো (যদি ৩য় অংশ থেকে থাকে, না হলে ২য় অংশ নিবে)
+            if (parts.length >= 3) {
+                item['name'] = parts[2].trim();
+            } else {
+                item['name'] = parts[1].trim();
+            }
+        } 
+        else {
+            // ৫. একদম সাধারণ টেক্সট (যদি কোনো সেপারেটর না থাকে)
             let namePart = trimmedString;
             let detectedPrice = 0;
             const priceMatch = namePart.match(/(?:দাম|price|টাকা|৳|Rs\.?)\s*(\d+)/i);
@@ -246,11 +258,6 @@
             }
             item['name'] = namePart || 'অজানা পণ্য';
             item['price'] = detectedPrice;
-        }
-      } else {
-        // যদি Key=Value পাওয়া যায়, তবে সেটা আইটেমে যোগ করা
-        for (const [key, value] of Object.entries(tempItem)) {
-            item[key] = value;
         }
       }
 
