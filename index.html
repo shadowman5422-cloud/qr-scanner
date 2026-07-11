@@ -298,7 +298,7 @@
 
     window.addEventListener('load', startScanner);
 
-    // ✅ Google Sheet-এ সেভ (আপনার দেওয়া লজিক অনুযায়ী)
+    // ✅ Google Sheet-এ সেভ (স্পেস ট্রিম করা লজিক) - আপনার দেওয়া কোড
     saveBtn.addEventListener('click', () => {
       if (productList.length === 0) return alert('তালিকা খালি');
       
@@ -309,7 +309,8 @@
       })
       .then(response => response.text())
       .then(data => {
-        if(data.includes("Success")) {
+        // 🔥 ট্রিম করা হয়েছে (যেকোনো লুকানো স্পেস বা এন্টার সরিয়ে ফেলবে)
+        if(data.trim() === "Success") {
            messageDiv.textContent = '✅ Google Sheet-এ জমা হয়েছে';
            messageDiv.className = 'success';
            productList = []; 
