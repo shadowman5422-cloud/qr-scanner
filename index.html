@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
-  <title>স্মার্ট QR ও বারকোড স্ক্যানার (JSON সমর্থন)</title>
+  <title>স্মার্ট QR ও বারকোড স্ক্যানার</title>
   <script src="https://unpkg.com/html5-qrcode"></script>
   <style>
     body { font-family: 'Segoe UI', sans-serif; padding: 15px; max-width: 650px; margin: auto; background: #f5f5f5; }
@@ -27,7 +27,7 @@
 </head>
 <body>
   <h2>📷 স্মার্ট QR & বারকোড স্ক্যানার</h2>
-  <p>সকল ফরম্যাট (JSON, key=value, সাধারণ টেক্সট) সমর্থন করে।</p>
+  <p>JSON, key=value এবং pipe(|) সেপারেটর সমর্থন করে।</p>
   <div id="reader"></div>
   <div style="text-align:center; margin-top:10px; display:flex; justify-content:center; gap:10px; flex-wrap:wrap;">
     <button id="startScanBtn">▶️ স্ক্যান করুন</button>
@@ -102,11 +102,8 @@
         Object.keys(item).forEach(key => allKeys.add(key));
       });
       
-      // আমরা নির্দিষ্ট কলামগুলো ইংরেজি বা বাংলায় অর্ডার করব
       const defaultHeaders = ['date', 'name', 'price', 'sku', 'currency'];
       const finalHeaders = Array.from(allKeys).filter(k => !defaultHeaders.includes(k));
-      
-      // হেডার অর্ডার ফিক্স করা (যাতে নাম ও দাম সঠিক কলামে আসে)
       const headers = ['date', 'name', 'price', ...finalHeaders, 'delete'];
 
       tableHead.innerHTML = '';
@@ -122,14 +119,13 @@
       });
       tableHead.appendChild(headerRow);
 
-      // ✅ টেবিল বডি এবং হিসাব (অত্যন্ত গুরুত্বপূর্ণ ফিক্স)
       tableBody.innerHTML = '';
       let totalItems = 0;
       let totalPrice = 0;
 
       productList.forEach((item, index) => {
         const tr = document.createElement('tr');
-        totalItems = index + 1; // ✅ সঠিক পণ্য গণনা (মানুষের চোখে দেখা অনুযায়ী)
+        totalItems++; // প্রতিটি সারি = ১টি পণ্য
 
         headers.forEach(header => {
           const td = document.createElement('td');
@@ -158,14 +154,14 @@
         tableBody.appendChild(tr);
       });
 
-      // ✅ চূড়ান্ত ফুটার (মোট পণ্য ও মোট দাম ঠিক কলামের নিচে)
+      // ✅ মোট পণ্য তারিখ কলামের নিচে, মোট দাম দাম কলামের নিচে
       tableFoot.innerHTML = '';
       const footerRow = document.createElement('tr');
       footerRow.className = 'totals';
       footerRow.innerHTML = `
-        <td style="text-align:right; font-weight:bold;">মোট পণ্য:</td>
-        <td style="font-weight:bold;">${totalItems}</td>
-        <td style="font-weight:bold;">${totalPrice > 0 ? totalPrice + ' টাকা' : '0 টাকা'}</td>
+        <td style="font-weight:bold;">মোট পণ্য:</td>
+        <td style="font-weight:bold; text-align:center;">${totalItems}</td>
+        <td style="font-weight:bold; text-align:center;">${totalPrice > 0 ? totalPrice + ' টাকা' : '0 টাকা'}</td>
         <td></td>
         <td></td>
       `;
@@ -173,7 +169,7 @@
       localStorage.setItem('productList', JSON.stringify(productList));
     }
 
-    // ✅ JSON বা টেক্সট পার্সিং
+    // ✅ পার্সিং লজিক (JSON, =, এবং | সব সমর্থন করে)
     function processQRData(qrString) {
       if (isProcessing) return;
 
@@ -207,31 +203,55 @@
         return;
       } catch (e) {}
 
-      // ২. Key=Value চেক
-      const parts = trimmedString.split('|');
-      let foundKeys = false;
-      parts.forEach(part => {
+      // ২. Key=Value ফরম্যাট চেক (এটি স্ট্যান্ডার্ড QR ফরম্যাট)
+      const partsEq = trimmedString.split('|');
+      let foundKeysEq = false;
+      let tempItem = {};
+      
+      partsEq.forEach(part => {
         if (part.includes('=')) {
           const kv = part.split('=');
           if (kv.length === 2) {
-            item[kv[0].trim()] = kv[1].trim();
-            foundKeys = true;
+            tempItem[kv[0].trim()] = kv[1].trim();
+            foundKeysEq = true;
           }
         }
       });
 
-      // ৩. সাধারণ টেক্সট
-      if (!foundKeys) {
-        let namePart = trimmedString;
-        let detectedPrice = 0;
-        const priceMatch = namePart.match(/(?:দাম|price|টাকা|৳|Rs\.?)\s*(\d+)/i);
-        if (priceMatch && priceMatch[1]) {
-          detectedPrice = parseFloat(priceMatch[1]);
-          namePart = namePart.replace(/(?:দাম|price|টাকা|৳|Rs\.?)\s*\d+\s*(?:টাকা)?/i, '').trim();
+      // ৩. সাধারণ বারকোড বা পাইপ(|) ফরম্যাট (যেমন: SKU|Price|Name)
+      // বারকোডে সাধারণত `=` থাকে না, কিন্তু `|` দিয়ে ডেটা ভাগ থাকে
+      if (!foundKeysEq) {
+        const partsPipe = trimmedString.split('|');
+        if (partsPipe.length >= 2) {
+            // ধরলাম বারকোড ফরম্যাট: SKU|Price|Name অথবা SKU|Name
+            item['sku'] = partsPipe[0].trim();
+            
+            // চেক করা হচ্ছে ২য় অংশটি দাম কিনা (সংখ্যা হলে দাম, না হলে নাম)
+            const possiblePrice = parseFloat(partsPipe[1].trim());
+            if (!isNaN(possiblePrice)) {
+                item['price'] = possiblePrice;
+                item['name'] = partsPipe[2] ? partsPipe[2].trim() : 'পণ্য';
+            } else {
+                item['name'] = partsPipe[1].trim();
+                item['price'] = 0;
+            }
+        } else {
+            // ৪. সাধারণ টেক্সট (যদি কোনো সেপারেটর না থাকে)
+            let namePart = trimmedString;
+            let detectedPrice = 0;
+            const priceMatch = namePart.match(/(?:দাম|price|টাকা|৳|Rs\.?)\s*(\d+)/i);
+            if (priceMatch && priceMatch[1]) {
+                detectedPrice = parseFloat(priceMatch[1]);
+                namePart = namePart.replace(/(?:দাম|price|টাকা|৳|Rs\.?)\s*\d+\s*(?:টাকা)?/i, '').trim();
+            }
+            item['name'] = namePart || 'অজানা পণ্য';
+            item['price'] = detectedPrice;
         }
-        if (!namePart) namePart = trimmedString;
-        item['name'] = namePart || 'অজানা পণ্য';
-        item['price'] = detectedPrice;
+      } else {
+        // যদি Key=Value পাওয়া যায়, তবে সেটা আইটেমে যোগ করা
+        for (const [key, value] of Object.entries(tempItem)) {
+            item[key] = value;
+        }
       }
 
       productList.push(item);
