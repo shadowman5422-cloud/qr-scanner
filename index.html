@@ -50,8 +50,8 @@
   <div id="message"></div>
 
   <script>
-    // ⚙️ আপনার Google Apps Script ওয়েব অ্যাপ URL বসান
-    const SCRIPT_URL='https://script.google.com/macros/s/AKfycbwSta9mYwOovoWkudNsbORFKIiXOQyDu4Z4EPBUQ1M1IXtV0k8MIO2dMcMo36hprzFh/exec';
+    // ⚙️ আপনার Google Apps Script ওয়েব অ্যাপ URL বসান (এক লাইনে, কোনো স্পেস নেই)
+    const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwSta9mYwOovoWkudNsbORFKIiXOQyDu4Z4EPBUQ1M1IXtV0k8MIO2dMcMo36hprzFh/exec';
 
     let productList = []; 
     let lastScannedText = ''; 
@@ -211,7 +211,7 @@
       
       parts.forEach(part => {
         if (part.includes('=')) {
-          const kv = part.split('=');
+          const kv = part.split('='');
           if (kv.length === 2) {
             tempItem[kv[0].trim()] = kv[1].trim();
             foundKeysEq = true;
@@ -298,7 +298,7 @@
 
     window.addEventListener('load', startScanner);
 
-    // ✅ Google Sheet-এ সেভ (স্পেস ট্রিম করা লজিক) - আপনার দেওয়া কোড
+    // ✅ Google Sheet-এ সেভ (স্পেস ট্রিম করা লজিক)
     saveBtn.addEventListener('click', () => {
       if (productList.length === 0) return alert('তালিকা খালি');
       
