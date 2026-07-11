@@ -50,7 +50,7 @@
   <div id="message"></div>
 
   <script>
-    // ⚙️ আপনার Google Apps Script ওয়েব অ্যাপ URL বসান (এক লাইনে, কোনো স্পেস নেই)
+    // ⚙️ আপনার Google Apps Script ওয়েব অ্যাপ URL বসান
     const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwSta9mYwOovoWkudNsbORFKIiXOQyDu4Z4EPBUQ1M1IXtV0k8MIO2dMcMo36hprzFh/exec';
 
     let productList = []; 
@@ -211,7 +211,7 @@
       
       parts.forEach(part => {
         if (part.includes('=')) {
-          const kv = part.split('='');
+          const kv = part.split('=');
           if (kv.length === 2) {
             tempItem[kv[0].trim()] = kv[1].trim();
             foundKeysEq = true;
@@ -296,20 +296,20 @@
       startScanner();
     };
 
+    // ✅ পৃষ্ঠা লোড হলে একবার স্ক্যানার চালু হবে (এখানে আগের ভুল ছিল, এখন ঠিক করা হয়েছে)
     window.addEventListener('load', startScanner);
 
-    // ✅ Google Sheet-এ সেভ (স্পেস ট্রিম করা লজিক)
+    // ✅ Google Sheet-এ সেভ
     saveBtn.addEventListener('click', () => {
       if (productList.length === 0) return alert('তালিকা খালি');
       
       fetch(SCRIPT_URL, {
         method: 'POST', 
-        body: JSON.stringify(productList), // পুরো তালিকা পাঠানো
+        body: JSON.stringify(productList),
         headers: { 'Content-Type': 'application/json' }
       })
       .then(response => response.text())
       .then(data => {
-        // 🔥 ট্রিম করা হয়েছে (যেকোনো লুকানো স্পেস বা এন্টার সরিয়ে ফেলবে)
         if(data.trim() === "Success") {
            messageDiv.textContent = '✅ Google Sheet-এ জমা হয়েছে';
            messageDiv.className = 'success';
