@@ -51,7 +51,7 @@
 
   <script>
     // ⚙️ আপনার Google Apps Script ওয়েব অ্যাপ URL বসান
-    const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyK0olIOOtCfEDlzOPMKZuGFrOb1-QELaXJR8Qf1FiSepHYriCcMCgPoXPZ9odgTXhZ/exec';
+    const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxhIIdqa7iWtTzhd0QURF74KmLpDxm2OxGceY_seYyY_QBreOwntv0QXX1weE2uIYDB/exec';
 
     let productList = []; 
     let lastScannedText = ''; 
@@ -303,13 +303,18 @@
     saveBtn.addEventListener('click', () => {
       if (productList.length === 0) return alert('তালিকা খালি');
       
+      // ✅ CORS সমস্যা এড়ানোর জন্য URLSearchParams ব্যবহার করা হচ্ছে
+      const formData = new URLSearchParams();
+      formData.append('data', JSON.stringify(productList));
+      
       fetch(SCRIPT_URL, {
-        method: 'POST', 
-        body: JSON.stringify(productList),
-        headers: { 'Content-Type': 'application/json' }
+        method: 'POST',
+        body: formData
+        // 👈 লক্ষ্য করুন: 'Content-Type' হেডার বাদ দেওয়া হয়েছে! (এটাই মূল ফিক্স)
       })
       .then(response => response.text())
       .then(data => {
+        console.log("Server says:", data); // ব্রাউজার কনসোলে দেখুন
         if(data.trim() === "Success") {
            messageDiv.textContent = '✅ Google Sheet-এ জমা হয়েছে';
            messageDiv.className = 'success';
@@ -321,6 +326,7 @@
         }
       })
       .catch(err => {
+        console.error("Fetch Error:", err); // ব্রাউজার কনসোলে এরর দেখুন
         messageDiv.textContent = '❌ নেটওয়ার্ক সমস্যা';
         messageDiv.className = 'error';
       });
