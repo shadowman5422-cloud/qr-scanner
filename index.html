@@ -8,21 +8,43 @@
   <style>
     body { font-family: 'Segoe UI', sans-serif; padding: 15px; max-width: 650px; margin: auto; background: #f5f5f5; }
     h2 { color: #2c3e50; }
-    table { border-collapse: collapse; width: 100%; background: white; box-shadow: 0 0 5px rgba(0,0,0,0.1); margin: 15px 0; font-size: 14px; overflow-x: auto; display: block; }
+    
+    /* টেবিল র্যাপার */
+    .table-wrapper { width: 100%; overflow-x: auto; margin: 15px 0; }
+    
+    /* টেবিলের সঠিক স্টাইল */
+    #productTable { 
+      display: table; 
+      width: 100%; 
+      border-collapse: collapse; 
+      background: white; 
+      box-shadow: 0 0 5px rgba(0,0,0,0.1); 
+      font-size: 14px; 
+    }
+    
     th { background: #3498db; color: white; padding: 10px 6px; text-align: center; position: sticky; top: 0; }
     td { border: 1px solid #ddd; padding: 8px 6px; text-align: center; }
+    td[contenteditable="true"]:focus { outline: 2px solid #3498db; background: #f0f8ff; }
     .totals td { font-weight: bold; background: #ecf0f1; }
+    
+    /* 🔥 বাধ্যতামূলক ফুটার ডিসপ্লে ফিক্স (এটাই ফুটার দেখানোর গ্যারান্টি) */
+    tfoot { display: table-footer-group !important; }
+    
     button { padding: 12px 18px; margin: 4px; border: none; border-radius: 6px; font-size: 15px; cursor: pointer; }
     #saveBtn { background: #27ae60; color: white; }
     #clearBtn { background: #e67e22; color: white; }
     #soundToggleBtn { background: #3498db; color: white; }
     #stopScanBtn { background: #000000; color: white; }
     #startScanBtn { background: #2ecc71; color: white; display: none; }
-    .delete-btn { background: #e74c3c; color: white; padding: 5px 10px; border-radius: 4px; font-size: 14px; border: none; }
+    .delete-btn { background: #e74c3c; color: white; padding: 5px 10px; border-radius: 4px; font-size: 14px; border: none; cursor: pointer; }
     #reader { width: 100%; max-width: 350px; margin: 0 auto 20px; }
     #message { margin-top: 12px; font-weight: bold; text-align: center; }
     .success { color: green; }
     .error { color: red; }
+    
+    #manualAddForm { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin: 10px 0; }
+    #manualAddForm input { padding: 10px; border: 1px solid #ddd; border-radius: 5px; font-size: 14px; flex: 1; min-width: 100px; }
+    #manualAddForm button { background: #8e44ad; color: white; flex: 1; min-width: 120px; }
   </style>
 </head>
 <body>
@@ -35,7 +57,16 @@
     <button id="soundToggleBtn">🔊 স্ক্যান শব্দ: চালু</button>
   </div>
 
-  <div style="overflow-x:auto;">
+  <div id="manualAddForm">
+    <input type="text" id="manualDateTime" placeholder="তারিখ ও সময় (যেমন ১২/৭/২০২৬ ৩:৩০:২৫ PM)">
+    <input type="text" id="manualName" placeholder="পণ্যের নাম *">
+    <input type="number" id="manualPrice" placeholder="দাম">
+    <input type="text" id="manualSku" placeholder="SKU (ঐচ্ছিক)">
+    <input type="text" id="manualNote" placeholder="নোট (ঐচ্ছিক)">
+    <button id="addManualBtn">➕ ম্যানুয়াল যোগ করুন</button>
+  </div>
+
+  <div class="table-wrapper">
     <table id="productTable">
       <thead id="tableHead"></thead>
       <tbody id="tableBody"></tbody>
@@ -50,8 +81,8 @@
   <div id="message"></div>
 
   <script>
-    // ⚙️ আপনার Google Apps Script ওয়েব অ্যাপ URL বসান
-    const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwmVMliDH1n-aDLgXAL1OSljWGibTTtkmdeSOZPqgwm8MCKAsX5pLfV9rmXI_kMMKdV/exec';
+    // ⚙️ আপনার নতুন ডিপ্লয় করা Apps Script URL বসান
+    const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwpj7xqG49L-4s3fOaA6tSlJ6CPpmvUxPmLpe8-94BR13Qhg1xi6Qui72-Zi0zLBRDT/exec';
 
     let productList = []; 
     let lastScannedText = ''; 
@@ -97,37 +128,42 @@
       renderTable();
     } catch(e) {}
 
-    function renderTable() {
-      const allKeys = new Set();
-      productList.forEach(item => {
-        Object.keys(item).forEach(key => allKeys.add(key));
-      });
-      
-      const defaultHeaders = ['date', 'name', 'price', 'sku', 'currency'];
-      const finalHeaders = Array.from(allKeys).filter(k => !defaultHeaders.includes(k));
-      const headers = ['date', 'name', 'price', ...finalHeaders, 'delete'];
+    // 🔥 ফর্মে তারিখ লিখলে অটোমেটিক সময় বসানোর লজিক
+    document.getElementById('manualDateTime').addEventListener('blur', function() {
+        let val = this.value.trim();
+        if (val) {
+            if (!val.includes(':') && !val.includes('AM') && !val.includes('PM')) {
+                const now = new Date();
+                const timeStr = now.toLocaleTimeString('en-GB', { hour12: false });
+                this.value = val + ' ' + timeStr;
+            }
+        }
+    });
 
+    // ✅ মূল রেন্ডার ফাংশন (ফুটার নিশ্চিত করা হয়েছে)
+    function renderTable() {
+      const headers = ['date', 'name', 'price', 'sku', 'note', 'delete'];
+
+      // ১. হেডার
       tableHead.innerHTML = '';
       const headerRow = document.createElement('tr');
       headers.forEach(header => {
         const th = document.createElement('th');
-        if(header === 'date') th.textContent = 'তারিখ';
+        if(header === 'date') th.textContent = 'তারিখ ও সময়';
         else if(header === 'delete') th.textContent = 'মুছুন';
         else if(header === 'name') th.textContent = 'পণ্যের নাম';
         else if(header === 'price') th.textContent = 'দাম';
-        else th.textContent = header;
+        else if(header === 'sku') th.textContent = 'SKU';
+        else if(header === 'note') th.textContent = 'নোট';
         headerRow.appendChild(th);
       });
       tableHead.appendChild(headerRow);
 
+      // ২. ডেটা
       tableBody.innerHTML = '';
-      let totalItems = 0;
       let totalPrice = 0;
-
       productList.forEach((item, index) => {
         const tr = document.createElement('tr');
-        totalItems++; // প্রতিটি সারি = ১টি পণ্য
-
         headers.forEach(header => {
           const td = document.createElement('td');
           if (header === 'delete') {
@@ -137,64 +173,78 @@
             delBtn.onclick = () => {
               if (confirm('আইটেমটি মুছে ফেলবেন?')) {
                 productList.splice(index, 1);
-                renderTable();
+                renderTable(); 
               }
             };
             td.appendChild(delBtn);
           } else {
+            td.contentEditable = "true";
             let val = item[header] || '';
-            if (header === 'price') {
-              let priceNum = parseFloat(val) || 0;
-              totalPrice += priceNum;
-              val = priceNum > 0 ? priceNum + ' টাকা' : '0';
+            if(header === 'price') {
+              let numVal = parseFloat(val) || 0;
+              totalPrice += numVal;
+              td.textContent = val;
+              td.addEventListener('input', (e) => {
+                let v = parseFloat(e.target.textContent) || 0;
+                item[header] = v;
+                renderTable(); 
+              });
+            } else {
+              td.textContent = val;
+              td.addEventListener('input', (e) => {
+                item[header] = e.target.textContent;
+                localStorage.setItem('productList', JSON.stringify(productList));
+              });
             }
-            td.textContent = val;
           }
           tr.appendChild(td);
         });
         tableBody.appendChild(tr);
       });
 
-      // মোট পণ্য তারিখ কলামের নিচে, মোট দাম দাম কলামের নিচে
+      // ৩. ✅ মোট পণ্য সারি (ফুটার) - এখন CSS ফিক্সের কারণে ১০০% আসবে
       tableFoot.innerHTML = '';
       const footerRow = document.createElement('tr');
       footerRow.className = 'totals';
+      
+      const savedFooterNote = localStorage.getItem('footerNote') || '';
       footerRow.innerHTML = `
         <td style="font-weight:bold;">মোট পণ্য:</td>
-        <td style="font-weight:bold; text-align:center;">${totalItems}</td>
-        <td style="font-weight:bold; text-align:center;">${totalPrice > 0 ? totalPrice + ' টাকা' : '0 টাকা'}</td>
+        <td style="font-weight:bold;">${productList.length}</td>
+        <td style="font-weight:bold;">${totalPrice > 0 ? totalPrice + ' টাকা' : '0 টাকা'}</td>
         <td></td>
+        <td id="totalNoteCell" contenteditable="true" style="font-weight:bold; text-align:center;">${savedFooterNote}</td>
         <td></td>
       `;
       tableFoot.appendChild(footerRow);
+      
+      const totalNoteCell = document.getElementById('totalNoteCell');
+      if (totalNoteCell) {
+        totalNoteCell.addEventListener('input', (e) => {
+          localStorage.setItem('footerNote', e.target.innerText);
+        });
+      }
       localStorage.setItem('productList', JSON.stringify(productList));
     }
 
-    // ✅ সঠিক পার্সিং লজিক
+    // ✅ পার্সিং লজিক
     function processQRData(qrString) {
       if (isProcessing) return;
-
       const trimmedString = qrString.trim();
-
       if (lastScannedText === trimmedString) {
-        if (!confirm('⚠️ এই পণ্যটি ইতিমধ্যে স্ক্যান করা হয়েছে। কি আরেকটি নতুন কপি হিসেবে যুক্ত করতে চান?')) {
-          return; 
-        }
+        if (!confirm('⚠️ এই পণ্যটি ইতিমধ্যে স্ক্যান করা হয়েছে। কি আরেকটি নতুন কপি হিসেবে যুক্ত করতে চান?')) return; 
       }
 
       isProcessing = true;
       lastScannedText = trimmedString;
       playBeep();
 
-      const today = new Date().toLocaleDateString('bn-BD', { year: 'numeric', month: '2-digit', day: '2-digit' });
-      const item = { date: today };
+      const currentDateTime = new Date().toLocaleString('en-GB'); 
+      const item = { date: currentDateTime, note: '' }; 
       
-      // ১. JSON ফরম্যাট চেক
       try {
         const jsonData = JSON.parse(trimmedString);
-        for (const [key, value] of Object.entries(jsonData)) {
-           item[key] = value;
-        }
+        for (const [key, value] of Object.entries(jsonData)) { item[key] = value; }
         productList.push(item);
         renderTable();
         messageDiv.textContent = `✅ ${item.name || item['পণ্যের নাম'] || 'পণ্য'} স্ক্যান সফল`;
@@ -204,11 +254,9 @@
         return;
       } catch (e) {}
 
-      // ২. Key=Value ফরম্যাট চেক
       const parts = trimmedString.split('|');
       let foundKeysEq = false;
       let tempItem = {};
-      
       parts.forEach(part => {
         if (part.includes('=')) {
           const kv = part.split('=');
@@ -218,53 +266,100 @@
           }
         }
       });
-
-      // ৩. যদি Key=Value পাওয়া যায়, সেটা আইটেমে যোগ
       if (foundKeysEq) {
-        for (const [key, value] of Object.entries(tempItem)) {
-            item[key] = value;
-        }
-      } 
-      else {
-        // ৪. সাধারণ বারকোড বা পাইপ(|) ফরম্যাট (SKU|Price|Name)
-        if (parts.length >= 2) {
-            item['sku'] = parts[0].trim();
-            
-            let tempPrice = parseFloat(parts[1].trim());
-            if (!isNaN(tempPrice)) {
-                item['price'] = tempPrice;
-            } else {
-                item['price'] = 0; 
-            }
-
-            if (parts.length >= 3) {
-                item['name'] = parts[2].trim();
-            } else {
-                item['name'] = parts[1].trim();
-            }
-        } 
-        else {
-            // ৫. একদম সাধারণ টেক্সট (যদি কোনো সেপারেটর না থাকে)
-            let namePart = trimmedString;
-            let detectedPrice = 0;
-            const priceMatch = namePart.match(/(?:দাম|price|টাকা|৳|Rs\.?)\s*(\d+)/i);
-            if (priceMatch && priceMatch[1]) {
-                detectedPrice = parseFloat(priceMatch[1]);
-                namePart = namePart.replace(/(?:দাম|price|টাকা|৳|Rs\.?)\s*\d+\s*(?:টাকা)?/i, '').trim();
-            }
-            item['name'] = namePart || 'অজানা পণ্য';
-            item['price'] = detectedPrice;
-        }
+        for (const [key, value] of Object.entries(tempItem)) { item[key] = value; }
+        productList.push(item);
+        renderTable();
+        messageDiv.textContent = `✅ ${item.name || item['পণ্যের নাম'] || 'পণ্য'} স্ক্যান সফল`;
+        messageDiv.className = 'success';
+        if (navigator.vibrate) navigator.vibrate(200);
+        setTimeout(() => { isProcessing = false; }, 500);
+        return;
       }
 
+      if (parts.length >= 2) {
+        let p1 = parts[0].trim(), p2 = parts[1].trim();
+        let p1Num = parseFloat(p1);
+        let p2Num = parseFloat(p2);
+        if (!isNaN(p1Num)) { 
+           item['price'] = p1Num;
+           item['name'] = p2;
+           if(parts.length >= 3) item['sku'] = parts[2].trim();
+        } else if (!isNaN(p2Num)) { 
+           item['name'] = p1;
+           item['price'] = p2Num;
+        } else { 
+           item['sku'] = p1;
+           item['name'] = p2;
+           if(parts.length >= 3) item['price'] = parseFloat(parts[2].trim()) || 0;
+        }
+        productList.push(item);
+        renderTable();
+        messageDiv.textContent = `✅ ${item.name || item['পণ্যের নাম'] || 'পণ্য'} স্ক্যান সফল`;
+        messageDiv.className = 'success';
+        if (navigator.vibrate) navigator.vibrate(200);
+        setTimeout(() => { isProcessing = false; }, 500);
+        return;
+      }
+
+      let namePart = trimmedString;
+      let detectedPrice = 0;
+      const leadingPriceMatch = namePart.match(/^\s*(\d+)\s+(.+)/);
+      const trailingPriceMatch = namePart.match(/(.+)\s+(\d+)\s*$/);
+      if (leadingPriceMatch && leadingPriceMatch[1]) {
+          detectedPrice = parseFloat(leadingPriceMatch[1]);
+          namePart = leadingPriceMatch[2].trim();
+      } else if (trailingPriceMatch && trailingPriceMatch[2]) {
+          detectedPrice = parseFloat(trailingPriceMatch[2]);
+          namePart = trailingPriceMatch[1].trim();
+      }
+      item['name'] = namePart || 'অজানা পণ্য';
+      item['price'] = detectedPrice;
       productList.push(item);
       renderTable();
-      messageDiv.textContent = `✅ ${item.name || item['পণ্যের নাম'] || 'পণ্য'} স্ক্যান সফল`;
+      messageDiv.textContent = `✅ ${item.name} স্ক্যান সফল`;
       messageDiv.className = 'success';
       if (navigator.vibrate) navigator.vibrate(200);
       setTimeout(() => { isProcessing = false; }, 500);
     }
 
+    // ✅ ম্যানুয়ালি পণ্য যোগ করা
+    function addManualProduct() {
+      let manualDateTime = document.getElementById('manualDateTime').value.trim();
+      const manualName = document.getElementById('manualName').value.trim();
+      const manualPrice = parseFloat(document.getElementById('manualPrice').value);
+      const manualSku = document.getElementById('manualSku').value.trim();
+      const manualNote = document.getElementById('manualNote').value.trim();
+
+      if (!manualName) {
+        alert('অনুগ্রহ করে পণ্যের নাম লিখুন!');
+        return;
+      }
+      if (!manualDateTime) {
+          const now = new Date();
+          manualDateTime = now.toLocaleString('en-GB');
+      }
+      const newItem = {
+        date: manualDateTime,
+        name: manualName,
+        price: isNaN(manualPrice) ? 0 : manualPrice,
+        sku: manualSku || '',
+        note: manualNote || ''
+      };
+      productList.push(newItem);
+      renderTable();
+      messageDiv.textContent = `✅ ম্যানুয়ালি ${newItem.name} যুক্ত করা হয়েছে`;
+      messageDiv.className = 'success';
+      document.getElementById('manualDateTime').value = '';
+      document.getElementById('manualName').value = '';
+      document.getElementById('manualPrice').value = '';
+      document.getElementById('manualSku').value = '';
+      document.getElementById('manualNote').value = '';
+    }
+
+    document.getElementById('addManualBtn').addEventListener('click', addManualProduct);
+
+    // স্ক্যানার সেটআপ
     const html5QrCode = new Html5Qrcode("reader");
     const formatsToSupport = [
       Html5QrcodeSupportedFormats.QR_CODE, Html5QrcodeSupportedFormats.EAN_13,
@@ -291,34 +386,27 @@
         startScanBtn.style.display = 'inline-block';
       });
     };
-
-    startScanBtn.onclick = () => {
-      startScanner();
-    };
-
-    // ✅ পৃষ্ঠা লোড হলে একবার স্ক্যানার চালু হবে (এখানে আগের ভুল ছিল, এখন ঠিক করা হয়েছে)
+    startScanBtn.onclick = startScanner;
     window.addEventListener('load', startScanner);
 
     // ✅ Google Sheet-এ সেভ
     saveBtn.addEventListener('click', () => {
       if (productList.length === 0) return alert('তালিকা খালি');
-      
-      // ✅ CORS সমস্যা এড়ানোর জন্য URLSearchParams ব্যবহার করা হচ্ছে
+      const footerNote = localStorage.getItem('footerNote') || '';
+      const dataToSend = { items: productList, meta: { total_note: footerNote } };
       const formData = new URLSearchParams();
-      formData.append('data', JSON.stringify(productList));
-      
+      formData.append('data', JSON.stringify(dataToSend));
       fetch(SCRIPT_URL, {
         method: 'POST',
         body: formData
-        // 👈 লক্ষ্য করুন: 'Content-Type' হেডার বাদ দেওয়া হয়েছে! (এটাই মূল ফিক্স)
       })
       .then(response => response.text())
       .then(data => {
-        console.log("Server says:", data); // ব্রাউজার কনসোলে দেখুন
         if(data.trim() === "Success") {
-           messageDiv.textContent = '✅ Google Sheet-এ জমা হয়েছে';
+           messageDiv.textContent = '✅ Google Sheet-এ জমা হয়েছে (সময় ও নোট-সহ)';
            messageDiv.className = 'success';
            productList = []; 
+           localStorage.removeItem('footerNote');
            renderTable();
         } else {
            messageDiv.textContent = '❌ সমস্যা: ' + data;
@@ -326,7 +414,7 @@
         }
       })
       .catch(err => {
-        console.error("Fetch Error:", err); // ব্রাউজার কনসোলে এরর দেখুন
+        console.error("Fetch Error:", err);
         messageDiv.textContent = '❌ নেটওয়ার্ক সমস্যা';
         messageDiv.className = 'error';
       });
@@ -334,7 +422,9 @@
 
     clearBtn.onclick = () => {
       if (confirm('সম্পূর্ণ তালিকা মুছবেন?')) {
-        productList = []; renderTable();
+        productList = []; 
+        localStorage.removeItem('footerNote');
+        renderTable();
         messageDiv.textContent = '';
       }
     };
